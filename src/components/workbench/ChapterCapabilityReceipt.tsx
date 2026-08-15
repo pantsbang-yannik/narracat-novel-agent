@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { MUTED_PILL_CLASS } from '@/design-system'
+import { Disclosure } from '@/components/ui/disclosure'
 import type { ChapterCapabilityReceiptData } from '@shared/types/capability-pack'
 
 // 结果语言标签：回执按「产出的东西是什么语言」分类，而非包内部字段名（spec §4.4）。
@@ -48,14 +49,19 @@ export function ChapterCapabilityReceipt({
   if (!receipt || (receipt.entries.length === 0 && receipt.warnings.length === 0)) return null
 
   return (
-    <details className={`${DETAILS_PANEL_CLASS} mt-8`} data-chapter-capability-receipt="true">
-      <summary className={DETAILS_SUMMARY_CLASS}>
-        <ChevronRight
-          aria-hidden="true"
-          className="mr-2 size-4 shrink-0 transition-transform group-open:rotate-90"
-        />
-        <span>本章使用的能力（{receipt.entries.length}）</span>
-      </summary>
+    <Disclosure
+      className={`${DETAILS_PANEL_CLASS} mt-8`}
+      data-chapter-capability-receipt="true"
+      summary={
+        <span className={DETAILS_SUMMARY_CLASS}>
+          <ChevronRight
+            aria-hidden="true"
+            className="mr-2 size-4 shrink-0 transition-transform group-open:rotate-90"
+          />
+          <span>本章使用的能力（{receipt.entries.length}）</span>
+        </span>
+      }
+    >
       <div className={DETAILS_BODY_CLASS}>
         {receipt.entries.map((entry, index) => (
           <div
@@ -81,6 +87,6 @@ export function ChapterCapabilityReceipt({
           </p>
         ))}
       </div>
-    </details>
+    </Disclosure>
   )
 }

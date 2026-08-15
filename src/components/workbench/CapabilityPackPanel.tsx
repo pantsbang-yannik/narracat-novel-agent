@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BadgeCheck, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Disclosure } from '@/components/ui/disclosure'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
@@ -345,10 +346,15 @@ export function CapabilityPackPanel({ projectPath }: { projectPath: string }) {
           </div>
 
           {stagedReceipts.length > 0 ? (
-            <details className="rounded-row border border-border bg-surface" data-capability-pack-panel-planning-receipts="true">
-              <summary className="cursor-pointer px-3 py-2.5 text-sm font-medium leading-6 text-foreground">
-                规划期装载的剧作方法
-              </summary>
+            <Disclosure
+              className="rounded-row border border-border bg-surface"
+              data-capability-pack-panel-planning-receipts="true"
+              summary={
+                <span className="cursor-pointer px-3 py-2.5 text-sm font-medium leading-6 text-foreground">
+                  规划期装载的剧作方法
+                </span>
+              }
+            >
               <div className="space-y-3 border-t border-border px-3 py-3">
                 {stagedReceipts.map((receipt) => (
                   <div key={receipt.stage} className="space-y-1.5" data-capability-pack-panel-planning-stage={receipt.stage}>
@@ -371,7 +377,7 @@ export function CapabilityPackPanel({ projectPath }: { projectPath: string }) {
                   </div>
                 ))}
               </div>
-            </details>
+            </Disclosure>
           ) : null}
         </div>
       </ScrollArea>

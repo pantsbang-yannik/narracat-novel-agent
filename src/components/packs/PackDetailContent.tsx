@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { BadgeCheck, Package } from 'lucide-react'
 import { MarkdownRenderer } from '@/components/workbench/MarkdownRenderer'
+import { Disclosure } from '@/components/ui/disclosure'
 import { MUTED_PILL_CLASS } from '@/design-system'
 import { cn } from '@/lib/cn'
 import type { CapabilityPackDetail, PackCardEntry, PackLocalSource } from '@shared/types/capability-pack'
@@ -165,16 +166,16 @@ export function PackDetailContent({
           </div>
           <div className="space-y-1.5">
             {localCards.map((card) => (
-              <details
+              <Disclosure
                 key={card.fileName}
                 className="rounded-row border border-border bg-surface"
                 data-pack-local-card={card.fileName}
+                summary={<span className="cursor-pointer px-3 py-2 text-sm leading-6 text-foreground">{card.fileName}</span>}
               >
-                <summary className="cursor-pointer px-3 py-2 text-sm leading-6 text-foreground">{card.fileName}</summary>
                 <div className="border-t border-border px-3 py-3">
                   <MarkdownRenderer text={card.body} variant="document" />
                 </div>
-              </details>
+              </Disclosure>
             ))}
           </div>
         </div>

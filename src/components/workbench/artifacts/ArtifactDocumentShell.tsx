@@ -4,6 +4,7 @@ import { MarkdownRenderer } from '../MarkdownRenderer'
 import type { NovelArtifact } from '@shared/types/novel'
 import { READING_BODY_FONT_CLASS, WORKBENCH_READING_CANVAS_CLASS } from '@/design-system'
 import { Button } from '@/components/ui/button'
+import { Disclosure } from '@/components/ui/disclosure'
 import { countBodyChars } from '@/lib/word-count'
 
 const DETAILS_SUMMARY_CLASS =
@@ -58,19 +59,18 @@ export function ArtifactDocumentShell({
     >
       {children}
       {chapterSummary !== undefined && (
-        <details className={`${DETAILS_PANEL_CLASS} mt-8`} data-chapter-summary="true">
-          <DetailSummary>本章总结</DetailSummary>
+        <Disclosure className={`${DETAILS_PANEL_CLASS} mt-8`} data-chapter-summary="true" summary={<DetailSummary>本章总结</DetailSummary>}>
           <div className={DETAILS_BODY_CLASS}>
             <StructuredMetadataValue value={chapterSummary} />
           </div>
-        </details>
+        </Disclosure>
       )}
       {!fileInfoHidden && (
-        <details
+        <Disclosure
           className={`${DETAILS_PANEL_CLASS} ${chapterSummary === undefined ? 'mt-8' : ''}`}
           data-reading-metadata="true"
+          summary={<DetailSummary>文件信息</DetailSummary>}
         >
-          <DetailSummary>文件信息</DetailSummary>
           <dl className={DETAILS_BODY_CLASS}>
             <DetailRow label="来源" type="file">
               NarraCat 输出
@@ -85,7 +85,7 @@ export function ArtifactDocumentShell({
               已生成
             </DetailRow>
           </dl>
-        </details>
+        </Disclosure>
       )}
     </section>
   )
@@ -327,14 +327,14 @@ function countReadableUnits(content: string): string {
 
 function DetailSummary({ children }: { children: ReactNode }) {
   return (
-    <summary className={DETAILS_SUMMARY_CLASS}>
+    <span className={`${DETAILS_SUMMARY_CLASS} w-auto`}>
       <ChevronRight
         aria-hidden="true"
         className="mr-2 size-4 shrink-0 transition-transform group-open:rotate-90"
         data-details-chevron="true"
       />
       <span>{children}</span>
-    </summary>
+    </span>
   )
 }
 

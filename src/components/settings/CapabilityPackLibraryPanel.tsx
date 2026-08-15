@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 import { BadgeCheck, BookOpen, Copy, Download, FolderPlus, Loader2, Package, PenTool, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Disclosure } from '@/components/ui/disclosure'
 import {
   Dialog,
   DialogContent,
@@ -487,13 +488,15 @@ function ImportLintWarningNotice({
   if (totalFindings === 0) return null
 
   return (
-    <details
+    <Disclosure
       className="mb-4 rounded-row border border-warning/30 bg-warning/10 px-3 py-2"
       data-capability-pack-import-lint-warning="true"
+      summary={
+        <span className="cursor-pointer text-xs font-medium leading-5 text-warning">
+          这个包的卡片里有 {totalFindings} 处像是在给 AI 下指令的语句
+        </span>
+      }
     >
-      <summary className="cursor-pointer text-xs font-medium leading-5 text-warning">
-        这个包的卡片里有 {totalFindings} 处像是在给 AI 下指令的语句
-      </summary>
       <div className="mt-2 space-y-1.5">
         {lintWarnings.flatMap((entry) =>
           entry.findings.map((finding, index) => (
@@ -521,7 +524,7 @@ function ImportLintWarningNotice({
           )),
         )}
       </div>
-    </details>
+    </Disclosure>
   )
 }
 
