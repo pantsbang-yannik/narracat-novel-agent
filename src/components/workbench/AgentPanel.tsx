@@ -163,7 +163,7 @@ export function AgentPanelContent({
   return (
     <section className="relative flex h-full min-h-0 flex-col overflow-hidden bg-workspace">
       <header
-        className="relative z-20 flex h-14 shrink-0 items-center justify-between gap-3 border border-border border-x-0 border-t-0 bg-workspace px-3.5 py-2.5 [-webkit-app-region:drag]"
+        className="relative z-20 flex h-14 shrink-0 items-center justify-between gap-3 border border-border border-x-0 border-t-0 bg-workspace pl-[0.875rem] pr-[max(0.875rem,var(--titlebar-inset-right))] py-2.5 [-webkit-app-region:drag]"
         data-agent-panel-titlebar="true"
       >
         <div className="flex min-w-0 items-center gap-2">

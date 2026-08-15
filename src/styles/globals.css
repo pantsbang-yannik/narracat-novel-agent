@@ -89,6 +89,25 @@
 
 @custom-variant dark (&:is([data-theme="dark"] *));
 
+/*
+ * 平台感知顶栏预留（main.tsx 把主进程平台写到 <html data-platform>）：
+ * - darwin：左上角红绿灯按钮区，顶栏左内容需让位（约 112px，与 trafficLightPosition x:18 匹配）
+ * - win32：右上角系统 caption 按钮（最小化/最大化/关闭，约 138px 宽），顶栏右内容需让位
+ * 其余平台无自绘按钮，两侧均为 0。顶栏组件用 pl/pr-[var(--titlebar-inset-left/right)] 消费。
+ */
+:root {
+  --titlebar-inset-left: 0px;
+  --titlebar-inset-right: 0px;
+}
+
+[data-platform="darwin"] {
+  --titlebar-inset-left: 112px;
+}
+
+[data-platform="win32"] {
+  --titlebar-inset-right: 150px;
+}
+
 :root,
 [data-theme="light"] {
   color-scheme: light;
