@@ -31,6 +31,7 @@ import {
   SettingsRow,
 } from '@/components/settings/SettingsLayout'
 import { useTheme, DARK_MODE_ENABLED, type Theme } from '@/lib/theme'
+import { Disclosure } from '@/components/ui/disclosure'
 import {
   deleteApiKey,
   getConfig,
@@ -176,6 +177,29 @@ function AboutBetaNotice() {
         ))}
       </div>
     </section>
+  )
+}
+
+/**
+ * 关于页诊断折叠（通用 Disclosure 的薄封装：钉住 data 锚点与摘要行样式）。
+ *
+ * 为什么不用原生 <details>：Windows 打包版（asar）实测渲染原生 details 元素会把渲染主线程
+ * 挂死（无 CPU 的同步阻塞；dev 的非 asar file:// 与 mac 均正常）——Chromium 41 引擎级问题，
+ * 与业务代码无关（纯净 <details> 即可复现）。全库统一走 ui/disclosure。
+ */
+function AboutDiagnosticsDisclosure({ children }: { children: React.ReactNode }) {
+  return (
+    <Disclosure
+      data-settings-about-diagnostics="true"
+      summary={(open) => (
+        <span className="flex min-h-[56px] w-full items-center justify-between gap-4 px-3 py-3 text-sm font-medium text-foreground">
+          <span>诊断信息</span>
+          <span className="text-xs font-normal text-muted-foreground">{open ? '收起' : '展开'}</span>
+        </span>
+      )}
+    >
+      <div className="divide-y divide-border border-t border-border">{children}</div>
+    </Disclosure>
   )
 }
 
@@ -820,13 +844,9 @@ export function SettingsRoute() {
                           </a>
                         </div>
                       </SettingsRow>
-                      <details data-settings-about-diagnostics="true" className="group">
-                        <summary className="flex min-h-[56px] cursor-default list-none items-center justify-between gap-4 px-3 py-3 text-sm font-medium text-foreground marker:hidden">
-                          <span>诊断信息</span>
-                          <span className="text-xs font-normal text-muted-foreground group-open:hidden">展开</span>
-                          <span className="hidden text-xs font-normal text-muted-foreground group-open:inline">收起</span>
-                        </summary>
-                        <div className="divide-y divide-border border-t border-border">
+                      {/* 规避 Chromium 41 在 Windows 打包版（asar）渲染原生 <details> 挂起主线程的
+                          引擎级 bug——换 ui/disclosure（AboutDiagnosticsDisclosure，功能 1:1）。 */}
+                      <AboutDiagnosticsDisclosure>
                           <SettingsRow title="Agent Core lock">
                             <div className="truncate text-right font-mono text-xs">
                               {diagnostics?.versionLock.path ?? 'agent-core/narracat-agent-core.lock.json'}
@@ -949,8 +969,7 @@ export function SettingsRoute() {
                               检测
                             </Button>
                           </SettingsActionRow>
-                        </div>
-                      </details>
+                      </AboutDiagnosticsDisclosure>
                     </SettingsCard>
                   </div>
                   <AboutBetaNotice />

@@ -24,7 +24,7 @@
     "ops:check": "node scripts/ops-check.mjs",
     "perf:baseline": "tsx scripts/performance-baseline.ts",
     "check:design": "node scripts/check-design-system.mjs",
-    "check:architecture": "node scripts/check-architecture.mjs --enforce && node scripts/check-prose-blocks.mjs",
+    "check:architecture": "node scripts/check-architecture.mjs --enforce && node scripts/check-prose-blocks.mjs && node scripts/check-no-native-details.mjs",
     "smoke:memory": "node scripts/ensure-electron-native.mjs && bun --no-cache run build && node scripts/smoke-memory.mjs",
     "typecheck": "tsc -b"
   },
