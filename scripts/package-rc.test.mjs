@@ -47,6 +47,7 @@ describe('RC package script', () => {
       'stage NarraCat Agent Core (whitelist)',
       'ensure Electron-ABI native modules',
       'prepare embedding model',
+      'probe staged Agent Core runtime',
       'build Electron bundles',
       'package macOS arm64 DMG + ZIP（仅签名）',
       'audit packaged app boundary',
@@ -60,21 +61,23 @@ describe('RC package script', () => {
     expect(steps[4].args.some((arg) => arg.endsWith('/scripts/stage-narracat-agent-core.mjs'))).toBe(true)
     expect(steps[5].args.some((arg) => arg.endsWith('/scripts/ensure-electron-native.mjs'))).toBe(true)
     expect(steps[6].args.some((arg) => arg.endsWith('/scripts/prepare-embedding-model.mjs'))).toBe(true)
-    expect(steps[8].args).toContain('--mac')
-    expect(steps[8].args).toContain('dmg')
-    expect(steps[8].args).toContain('zip')
-    expect(steps[8].args).toContain('--arm64')
-    expect(steps[8].args).toContain('--config.extraMetadata.version=0.1.42')
-    expect(steps[8].args).toContain('--config.mac.notarize=false')
-    expect(steps[9].args.some((arg) => arg.endsWith('/scripts/audit-packaged-app-boundary.mjs'))).toBe(true)
-    expect(steps[11].args.some((arg) => arg.endsWith('/scripts/verify-signed-artifact.mjs'))).toBe(true)
-    expect(steps[11].args).not.toContain('--notarized')
+    expect(steps[7].args.some((arg) => arg.endsWith('/scripts/probe-staged-agent-core-runtime.mjs'))).toBe(true)
+    expect(steps[9].args).toContain('--mac')
+    expect(steps[9].args).toContain('dmg')
+    expect(steps[9].args).toContain('zip')
+    expect(steps[9].args).toContain('--arm64')
+    expect(steps[9].args).toContain('--config.extraMetadata.version=0.1.42')
+    expect(steps[9].args).toContain('--config.mac.notarize=false')
+    expect(steps[10].args.some((arg) => arg.endsWith('/scripts/audit-packaged-app-boundary.mjs'))).toBe(true)
+    expect(steps[12].args.some((arg) => arg.endsWith('/scripts/verify-signed-artifact.mjs'))).toBe(true)
+    expect(steps[12].args).not.toContain('--notarized')
   })
 })
 
-describe('产物冒烟步骤', () => {
-  // 换 pi 前这一步是 probe-staged-agent-core-runtime.mjs，经已退役的 headless node 跑 build/ 暂存区；
-  // 现在改跑 smoke-memory 并把 electron 二进制指向刚打出来的 .app，验的是真正要发出去的东西。
+describe('两道运行时防线（staged 探针 + 产物冒烟）', () => {
+  // 两者验的不是同一个二进制：探针在打包前用当前 Node 跑暂存树（引擎自带的 node-ABI
+  // better-sqlite3，跨平台、可进 Windows CI）；冒烟在打包后启动产物 .app，走生产实际路径
+  // （根 node_modules 的 Electron-ABI better-sqlite3 + utilityProcess）。少任何一条都留缺口。
   test('冒烟跑在打包之后，且 electron 二进制指向本次产物 .app', () => {
     const steps = createPackageRcSteps({ clientVersion: '0.1.9999' })
     const labels = steps.map((step) => step.label)
@@ -90,9 +93,17 @@ describe('产物冒烟步骤', () => {
     )
   })
 
-  test('已退役的 headless runtime 探针不得复活', () => {
+  test('探针排在打包之前（早失败：暂存树坏了不该先烧几分钟打包）', () => {
+    const labels = createPackageRcSteps({ clientVersion: '0.1.9999' }).map((step) => step.label)
+    expect(labels.indexOf('probe staged Agent Core runtime')).toBeLessThan(
+      labels.findIndex((label) => label.includes('package macOS')),
+    )
+  })
+
+  test('探针步骤本身不带 env 覆盖，冒烟才需要（避免有人顺手给探针塞 electron 二进制）', () => {
     const steps = createPackageRcSteps({ clientVersion: '0.1.9999' })
-    expect(steps.some((step) => step.args.some((arg) => arg.includes('probe-staged-agent-core-runtime')))).toBe(false)
+    const probe = steps.find((step) => step.label === 'probe staged Agent Core runtime')
+    expect(probe.env).toBeUndefined()
   })
 })
 
@@ -107,6 +118,7 @@ describe('release 档：dmg 容器公证步骤', () => {
       'stage NarraCat Agent Core (whitelist)',
       'ensure Electron-ABI native modules',
       'prepare embedding model',
+      'probe staged Agent Core runtime',
       'build Electron bundles',
       'package macOS arm64 DMG + ZIP（签名 + 公证）',
       'audit packaged app boundary',

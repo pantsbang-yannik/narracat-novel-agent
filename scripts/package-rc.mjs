@@ -162,6 +162,14 @@ export function createPackageRcSteps({
       args: [join(repoRoot, 'scripts', 'prepare-embedding-model.mjs')],
     },
     {
+      // 第一道防线（打包前，跨平台）：拿当前 Node 跑 staged 的 embedding selftest + MCP 启动探测，
+      // 验暂存树自身完整（模型在不在、mcp-server dist 全不全、原生扩展装不装得上）。
+      // 这是 embedding 静默降级（#312/#316/#320）的打包期防线，且纯命令行、可进 Windows CI。
+      label: 'probe staged Agent Core runtime',
+      command: process.execPath,
+      args: [join(repoRoot, 'scripts', 'probe-staged-agent-core-runtime.mjs')],
+    },
+    {
       label: 'build Electron bundles',
       command: bin('electron-vite'),
       args: ['build'],
@@ -184,16 +192,16 @@ export function createPackageRcSteps({
       args: [join(repoRoot, 'scripts', 'audit-packaged-app-boundary.mjs')],
     },
     {
-      // 产物冒烟：复用 smoke-memory 的既有通道（真 utilityProcess + Electron-ABI better-sqlite3 +
-      // 引擎 core dist 动态加载 + RPC 往返 + embedding selftest），只把 electron 二进制换成刚打出来的
-      // .app——验的是真正要发出去的东西，不是 build/ 暂存区。打包态由 buildMemoryWorkerEnv 以
-      // resourcesPath 解析出真实模型路径覆盖 smoke 的 dummy 目录，所以这里连打包的 embedding 一并验到。
+      // 第二道防线（打包后，仅 mac 档）：复用 smoke-memory 的既有通道，但把 electron 二进制换成
+      // 刚打出来的 .app——验真正要发出去的东西，且走的是**生产实际路径**：真 utilityProcess +
+      // 根 node_modules 的 Electron-ABI better-sqlite3 + 引擎 core dist 动态加载 + RPC 往返。
+      // 打包态由 buildMemoryWorkerEnv 以 resourcesPath 解析真实模型路径覆盖 smoke 的 dummy 目录，
+      // 所以打包的 embedding 一并验到。
       //
-      // 换 pi（claude-sdk 全链退役）前这一步是 probe-staged-agent-core-runtime.mjs：它经 headless node
-      // 跑 staged mcp-server，加载引擎自带的 node-ABI better-sqlite3。那条路径生产上根本不走（线上是
-      // utilityProcess + 根 node_modules 的 Electron-ABI 版），且 headless runtime 已随 claude-sdk 一起
-      // 退役、产物不再产出——探针此后只靠本机 build/ 残留目录假绿，换个干净工作区就必炸。放在
-      // audit boundary 之后：静态只读检查快，先让它拦；这一步要真启动 app，慢且有副作用。
+      // 与上面的 staged 探针是互补而非重复：探针验暂存树自身（node-ABI，跨平台，能进 CI），
+      // 这里验最终产物（Electron-ABI，即生产真正加载的那一份）。两者的 sqlite 根本不是同一个二进制。
+      // 放在 audit boundary 之后：静态只读检查快，先让它拦；这一步要真启动 app，慢且有副作用。
+      // Windows 档接入时不要照搬——它要启动 GUI，而 Windows 出包走 CI、流水线从不启动界面。
       label: 'smoke packaged app',
       command: process.execPath,
       args: [join(repoRoot, 'scripts', 'smoke-memory.mjs')],
