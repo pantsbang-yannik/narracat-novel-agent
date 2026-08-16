@@ -14,7 +14,7 @@ describe('RC package configuration', () => {
   test('targets Developer ID signed + notarized macOS arm64 DMG/ZIP artifacts', () => {
     expect(packageJson.scripts.package).toBe('node scripts/package-rc.mjs')
     expect(packageJson.scripts['package:release']).toBe('node scripts/package-rc.mjs --notarize')
-    expect(packageJson.build.artifactName).toBe('NarraCat-${version}-mac-${arch}.${ext}')
+    expect(packageJson.build.artifactName).toBe('NarraCat-${version}-${os}-${arch}.${ext}')
     // 不再硬编码 identity：由 electron-builder 从 Keychain 解析 Developer ID Application。
     // 缺证书时 electron-builder 只警告不报错，故打包链另设 check-signing-identity 硬闸（Task 2）。
     expect(packageJson.build.mac.identity).toBeUndefined()
@@ -74,8 +74,12 @@ describe('RC package configuration', () => {
     expect(appIconSvg).toContain('<rect width="512" height="512" rx="96" fill="#FFFFFF"/>')
   })
 
-  test('keeps only the Electron locales used by the RC app', () => {
-    expect(packageJson.build.electronLanguages).toEqual(['zh_CN', 'en'])
+  test('keeps only the Electron locales used by the RC app (per-platform)', () => {
+    // mac lproj 用下划线命名（zh_CN.lproj），win pak 用连字符命名（zh-CN.pak）——
+    // electron-builder 按平台精确匹配，两套命名各对一半，必须分设（#3）。
+    expect(packageJson.build.electronLanguages).toBeUndefined()
+    expect(packageJson.build.mac.electronLanguages).toEqual(['zh_CN', 'en'])
+    expect(packageJson.build.win.electronLanguages).toEqual(['zh-CN', 'en-US'])
   })
 
   test('packages only built runtime output into app.asar', () => {
