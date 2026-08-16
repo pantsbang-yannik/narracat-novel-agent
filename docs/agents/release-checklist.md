@@ -46,9 +46,9 @@ Do not treat this smoke as proof of Agent execution or runtime identity. Run Pac
 
 ## Packaged Agent Runtime Smoke
 
-Use the unpacked `.app` produced beside the DMG. This smoke validates the bundled headless runtime, not model quality.
+Use the unpacked `.app` produced beside the DMG. This smoke validates the bundled runtime, not model quality.
 
-0. Packaging already ran `scripts/probe-staged-agent-core-runtime.mjs` (step 8 of `scripts/package-rc.mjs`, i.e. `steps[7]`): it runs the embedding selftest and starts the staged NovelMemory MCP server through the bundled headless runtime, and fails the package on either. If that step was skipped, do not treat the artifact as smoke-ready.
+0. Packaging already ran `scripts/smoke-memory.mjs` against this very `.app` (the `smoke packaged app` step of `scripts/package-rc.mjs`, right after `audit packaged app boundary`): it starts the packaged app headlessly, drives the NovelMemory utility process over real RPC, and runs the embedding selftest against the bundled model, failing the package on any of them. If that step was skipped, do not treat the artifact as smoke-ready.
 1. Launch the unpacked `NarraCat.app` as a packaged app, not through `bun --no-cache run dev`.
 2. Open Settings and run the vector health check card; a green result proves the bundled runtime plus the bundled embedding model still work under hardened runtime.
 3. Confirm Settings reports the locked NarraCat Agent Core version and path from inside the packaged app (not from the working tree).

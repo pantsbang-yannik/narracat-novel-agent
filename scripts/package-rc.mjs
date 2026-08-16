@@ -110,6 +110,12 @@ function dmgArtifactPath(clientVersion) {
   return join(repoRoot, 'dist', `NarraCat-${clientVersion}-mac-arm64.dmg`)
 }
 
+/** 本次打包产出的未压缩 .app 可执行文件，路径约定与 audit-packaged-app-boundary.mjs 的
+ * `dist/mac-arm64/NarraCat.app` 一致（本仓只打 arm64）。 */
+function packagedAppBinaryPath() {
+  return join(repoRoot, 'dist', 'mac-arm64', 'NarraCat.app', 'Contents', 'MacOS', 'NarraCat')
+}
+
 export function createPackageRcSteps({
   clientVersion = resolveClientBuildVersion({ root: repoRoot }),
   notarize = false,
@@ -156,11 +162,6 @@ export function createPackageRcSteps({
       args: [join(repoRoot, 'scripts', 'prepare-embedding-model.mjs')],
     },
     {
-      label: 'probe staged Agent Core runtime',
-      command: process.execPath,
-      args: [join(repoRoot, 'scripts', 'probe-staged-agent-core-runtime.mjs')],
-    },
-    {
       label: 'build Electron bundles',
       command: bin('electron-vite'),
       args: ['build'],
@@ -181,6 +182,22 @@ export function createPackageRcSteps({
       label: 'audit packaged app boundary',
       command: process.execPath,
       args: [join(repoRoot, 'scripts', 'audit-packaged-app-boundary.mjs')],
+    },
+    {
+      // 产物冒烟：复用 smoke-memory 的既有通道（真 utilityProcess + Electron-ABI better-sqlite3 +
+      // 引擎 core dist 动态加载 + RPC 往返 + embedding selftest），只把 electron 二进制换成刚打出来的
+      // .app——验的是真正要发出去的东西，不是 build/ 暂存区。打包态由 buildMemoryWorkerEnv 以
+      // resourcesPath 解析出真实模型路径覆盖 smoke 的 dummy 目录，所以这里连打包的 embedding 一并验到。
+      //
+      // 换 pi（claude-sdk 全链退役）前这一步是 probe-staged-agent-core-runtime.mjs：它经 headless node
+      // 跑 staged mcp-server，加载引擎自带的 node-ABI better-sqlite3。那条路径生产上根本不走（线上是
+      // utilityProcess + 根 node_modules 的 Electron-ABI 版），且 headless runtime 已随 claude-sdk 一起
+      // 退役、产物不再产出——探针此后只靠本机 build/ 残留目录假绿，换个干净工作区就必炸。放在
+      // audit boundary 之后：静态只读检查快，先让它拦；这一步要真启动 app，慢且有副作用。
+      label: 'smoke packaged app',
+      command: process.execPath,
+      args: [join(repoRoot, 'scripts', 'smoke-memory.mjs')],
+      env: { NARRACAT_SMOKE_ELECTRON_BIN: packagedAppBinaryPath() },
     },
     ...(notarize
       ? [
@@ -213,7 +230,12 @@ export function runPackageRc({ cwd = repoRoot, stdio = 'inherit', notarize = fal
   }
   const clientVersion = resolveClientBuildVersion({ root: cwd })
   for (const step of createPackageRcSteps({ clientVersion, notarize })) {
-    execFileSync(step.command, step.args, { cwd, stdio })
+    // step.env 是叠加层不是替换层：子进程仍需完整继承 process.env（PATH、公证/语料凭证等）。
+    execFileSync(step.command, step.args, {
+      cwd,
+      stdio,
+      ...(step.env ? { env: { ...process.env, ...step.env } } : {}),
+    })
   }
 }
 
