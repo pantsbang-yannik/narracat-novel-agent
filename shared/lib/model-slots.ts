@@ -9,6 +9,7 @@ import {
   type AppConfig,
   type ModelPoolEntry,
   type ProviderId,
+  type WireId,
 } from '@shared/types/config'
 
 export type ModelSlotView = Pick<
@@ -20,6 +21,7 @@ export interface ResolvedModel {
   key: string
   provider: ProviderId
   baseUrl: string
+  wire: WireId
   modelId: string
   verified: boolean
 }
@@ -46,13 +48,19 @@ function providerBaseUrl(view: ModelSlotView, provider: ProviderId): string {
   return view.providers[provider]?.baseUrl ?? DEFAULT_PROVIDER_SETTINGS[provider].baseUrl
 }
 
+function providerWire(view: ModelSlotView, provider: ProviderId): WireId {
+  const stored = view.providers[provider]?.wire
+  return stored === 'anthropic' || stored === 'openai' ? stored : DEFAULT_PROVIDER_SETTINGS[provider].wire
+}
+
 export function isEntryVerified(view: ModelSlotView, entry: ModelPoolEntry): boolean {
   if (!entry.verification) return false
   const apiKeyUpdatedAt = view.apiKeyMetadata[entry.provider]?.updatedAt
   if (!apiKeyUpdatedAt) return false
   return (
     entry.verification.apiKeyUpdatedAt === apiKeyUpdatedAt &&
-    entry.verification.baseUrl === providerBaseUrl(view, entry.provider)
+    entry.verification.baseUrl === providerBaseUrl(view, entry.provider) &&
+    entry.verification.wire === providerWire(view, entry.provider)
   )
 }
 
@@ -61,6 +69,7 @@ function resolveEntry(view: ModelSlotView, entry: ModelPoolEntry): ResolvedModel
     key: modelEntryKey(entry),
     provider: entry.provider,
     baseUrl: providerBaseUrl(view, entry.provider),
+    wire: providerWire(view, entry.provider),
     modelId: entry.modelId,
     verified: isEntryVerified(view, entry),
   }

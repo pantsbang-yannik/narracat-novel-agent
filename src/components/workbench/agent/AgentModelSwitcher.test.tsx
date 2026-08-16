@@ -28,6 +28,7 @@ function verifiedEntry(overrides: Partial<ModelPoolEntry> = {}): ModelPoolEntry 
       verifiedAt: '2026-08-02T00:00:00.000Z',
       apiKeyUpdatedAt: '2026-08-01T00:00:00.000Z',
       baseUrl: 'https://api.deepseek.com/anthropic',
+      wire: 'anthropic',
     },
     ...overrides,
   }

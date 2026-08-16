@@ -2,19 +2,30 @@
 export const PROVIDER_IDS = ['deepseek', 'anthropic', 'minimax', 'glm', 'custom'] as const
 export type ProviderId = (typeof PROVIDER_IDS)[number]
 
+/**
+ * 接口协议（wire）：渠道端点走哪种 HTTP 协议。
+ * - anthropic：Anthropic Messages wire（/v1/messages，x-api-key 头）——内置四家与默认。
+ * - openai：OpenAI Chat Completions wire（/chat/completions，Bearer 头）——仅 custom 渠道可选，
+ *   baseUrl 约定以 /v1 结尾原样使用。归一化层强制：非 custom 渠道一律回落 anthropic（防手改配置错配）。
+ */
+export const WIRE_IDS = ['anthropic', 'openai'] as const
+export type WireId = (typeof WIRE_IDS)[number]
+
 export interface ProviderApiKeyMetadata {
   updatedAt: string
 }
 
 export interface ProviderSettings {
   baseUrl: string
+  wire: WireId
 }
 
-/** 池条目验证快照：绑定验证时刻的 Key 代际与端点；任一变化即失效（normalize 自愈清空）。 */
+/** 池条目验证快照：绑定验证时刻的 Key 代际与端点（baseUrl + wire）；任一变化即失效（normalize 自愈清空）。 */
 export interface ModelEntryVerification {
   verifiedAt: string
   apiKeyUpdatedAt: string
   baseUrl: string
+  wire: WireId
 }
 
 export interface ModelPoolEntry {
@@ -42,11 +53,11 @@ export interface AppConfig {
 // 冻结防止某处 fixture 原地 push/mutate 污染到其他用例共用的同一个对象引用（数组本身与
 // 条目对象都冻结）。normalizeAppConfig 的拷贝路径全走 map/spread 产出新对象，不受影响。
 export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = Object.freeze({
-  deepseek: Object.freeze({ baseUrl: 'https://api.deepseek.com/anthropic' }),
-  anthropic: Object.freeze({ baseUrl: '' }),
-  minimax: Object.freeze({ baseUrl: 'https://api.minimaxi.com/anthropic' }),
-  glm: Object.freeze({ baseUrl: 'https://open.bigmodel.cn/api/anthropic' }),
-  custom: Object.freeze({ baseUrl: '' }),
+  deepseek: Object.freeze({ baseUrl: 'https://api.deepseek.com/anthropic', wire: 'anthropic' }),
+  anthropic: Object.freeze({ baseUrl: '', wire: 'anthropic' }),
+  minimax: Object.freeze({ baseUrl: 'https://api.minimaxi.com/anthropic', wire: 'anthropic' }),
+  glm: Object.freeze({ baseUrl: 'https://open.bigmodel.cn/api/anthropic', wire: 'anthropic' }),
+  custom: Object.freeze({ baseUrl: '', wire: 'anthropic' }),
 })
 
 export const DEFAULT_MODEL_POOL: ModelPoolEntry[] = Object.freeze([

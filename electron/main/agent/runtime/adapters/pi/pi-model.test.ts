@@ -19,7 +19,7 @@ function makeConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   }
 }
 
-/** 已验证条目：verification 快照须与 apiKeyMetadata/providers[].baseUrl 匹配才算 verified。 */
+/** 已验证条目：verification 快照须与 apiKeyMetadata/providers[].baseUrl/wire 匹配才算 verified。 */
 function verifiedEntry(provider: ModelPoolEntry['provider'], modelId: string): ModelPoolEntry {
   return {
     provider,
@@ -28,6 +28,7 @@ function verifiedEntry(provider: ModelPoolEntry['provider'], modelId: string): M
       verifiedAt: '2026-08-02T00:00:00.000Z',
       apiKeyUpdatedAt: '2026-08-01T00:00:00.000Z',
       baseUrl: DEFAULT_PROVIDER_SETTINGS[provider].baseUrl,
+      wire: DEFAULT_PROVIDER_SETTINGS[provider].wire,
     },
   }
 }
@@ -83,6 +84,35 @@ describe('createPiModel', () => {
 
   test('模型池为空（主力槽无法解析）→ 抛明确错误', () => {
     expect(() => createPiModel(makeConfig({ modelPool: [], primaryModelKey: null }))).toThrow('未配置')
+  })
+
+  test('custom 渠道 openai wire → api 推导为 openai-completions', () => {
+    const config = makeConfig({
+      providers: { ...DEFAULT_PROVIDER_SETTINGS, custom: { baseUrl: 'https://gw.example.com/v1', wire: 'openai' } },
+      modelPool: [{ provider: 'custom', modelId: 'some-model', verification: null }],
+      primaryModelKey: 'custom/some-model',
+    })
+    const model = createPiModel(config)
+    expect(model.api).toBe('openai-completions')
+    expect(model.baseUrl).toBe('https://gw.example.com/v1')
+  })
+
+  test('openai wire 缺 baseUrl → 提前抛可操作错误（不打到 anthropic 官方端点得 404）', () => {
+    const config = makeConfig({
+      providers: { ...DEFAULT_PROVIDER_SETTINGS, custom: { baseUrl: '', wire: 'openai' } },
+      modelPool: [{ provider: 'custom', modelId: 'some-model', verification: null }],
+      primaryModelKey: 'custom/some-model',
+    })
+    expect(() => createPiModel(config)).toThrow('OpenAI 协议渠道需要先在设置中填写接口地址')
+  })
+
+  test('custom 渠道默认仍为 anthropic wire（anthropic-messages）', () => {
+    const config = makeConfig({
+      providers: { ...DEFAULT_PROVIDER_SETTINGS },
+      modelPool: [{ provider: 'custom', modelId: 'some-model', verification: null }],
+      primaryModelKey: 'custom/some-model',
+    })
+    expect(createPiModel(config).api).toBe('anthropic-messages')
   })
 })
 

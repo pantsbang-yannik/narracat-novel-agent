@@ -211,7 +211,7 @@ export function registerAppIpcHandlers(): void {
     const apiKey = await getApiKey(input)
     if (!apiKey) return { ok: false, message: '请先保存该服务商的 API Key。' }
     if (findUnsafeApiKeyCharacter(apiKey)) return { ok: false, message: UNSAFE_API_KEY_MESSAGE }
-    return fetchProviderModels({ baseUrl: config.providers[input].baseUrl, apiKey })
+    return fetchProviderModels({ baseUrl: config.providers[input].baseUrl, wire: config.providers[input].wire, apiKey })
   })
 
   ipcMain.handle('narracat:diagnostics', async () => {

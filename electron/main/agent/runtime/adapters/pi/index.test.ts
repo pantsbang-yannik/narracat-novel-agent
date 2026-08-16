@@ -372,6 +372,7 @@ describe('切片⑥ NovelMemory 工具接线', () => {
             verifiedAt: '2026-08-02T00:00:00.000Z',
             apiKeyUpdatedAt: '2026-08-01T00:00:00.000Z',
             baseUrl: DEFAULT_PROVIDER_SETTINGS.deepseek.baseUrl,
+            wire: 'anthropic',
           },
         },
       ],

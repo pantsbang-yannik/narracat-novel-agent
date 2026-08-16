@@ -24,7 +24,7 @@ import type { PiMaxTurnsMessage, PiRunEndMessage, PiSessionMessage } from './pi-
 import type { PiSubagentEventChannel, PiSubagentEventMessage } from './pi-subagent.ts'
 
 export interface PiRunOptions {
-  model: Model<'anthropic-messages'>
+  model: Model<'anthropic-messages' | 'openai-completions'>
   provider: string
   apiKey: string
   cwd: string

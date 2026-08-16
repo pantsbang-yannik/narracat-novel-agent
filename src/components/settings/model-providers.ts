@@ -12,7 +12,7 @@ export const MODEL_PROVIDERS: Array<{ id: ProviderId; label: string; detail: str
   { id: 'glm', label: '智谱 GLM', detail: '智谱 BigModel，兼容 Anthropic 协议。' },
   { id: 'minimax', label: 'MiniMax', detail: 'MiniMax 海螺，兼容 Anthropic 协议。' },
   { id: 'anthropic', label: 'Anthropic', detail: '官方 Claude 服务，直连时不需要填接口地址。' },
-  { id: 'custom', label: '自定义', detail: '接入兼容 Anthropic 协议的服务或内部网关。' },
+  { id: 'custom', label: '自定义', detail: '接入兼容 Anthropic/OpenAI 协议的服务或内部网关。' },
 ]
 
 // 起步精选目录：官方模型迭代快且无可靠的列模型接口，故由 App 内置维护，

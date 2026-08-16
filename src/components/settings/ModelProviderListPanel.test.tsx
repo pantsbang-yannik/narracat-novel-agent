@@ -67,6 +67,7 @@ describe('ModelProviderListPanel（SSR 结构断言）', () => {
               verifiedAt: '2026-08-01T10:00:00.000Z',
               apiKeyUpdatedAt: '2026-08-01T09:00:00.000Z',
               baseUrl: DEFAULT_PROVIDER_SETTINGS.deepseek.baseUrl,
+              wire: 'anthropic',
             },
           },
         ],

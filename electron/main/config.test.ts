@@ -129,6 +129,7 @@ describe('app config', () => {
       verifiedAt: '2026-06-04T01:05:00.000Z',
       apiKeyUpdatedAt: '2026-06-04T01:00:00.000Z',
       baseUrl: 'https://api.deepseek.com/anthropic',
+      wire: 'anthropic',
     })
     expect(JSON.stringify(verified)).not.toContain('sk-')
     expect(JSON.stringify(verified)).not.toContain('hash')
@@ -367,6 +368,7 @@ describe('markProviderVerified', () => {
         verifiedAt: '2026-08-03T08:00:00.000Z',
         apiKeyUpdatedAt: '2026-08-01T00:00:00.000Z',
         baseUrl: 'https://open.bigmodel.cn/api/anthropic',
+        wire: 'anthropic',
       })
     }
 
@@ -389,5 +391,100 @@ describe('markProviderVerified', () => {
     const marked = markProviderVerified(base, 'glm', '2026-08-03T08:00:00.000Z')
 
     expect(marked.modelPool.every((entry) => entry.verification === null)).toBe(true)
+  })
+})
+
+describe('wire 归一化', () => {
+  test('openai 仅 custom 渠道保留；其余渠道（含手改配置文件）强制回落 anthropic', () => {
+    const config = normalizeAppConfig(
+      {
+        providers: {
+          deepseek: { baseUrl: 'https://api.deepseek.com/anthropic', wire: 'openai' },
+          glm: { baseUrl: 'https://open.bigmodel.cn/api/anthropic', wire: 'openai' },
+          custom: { baseUrl: 'https://gw.example.com/v1', wire: 'openai' },
+        },
+      },
+      '/Users/tester',
+    )
+
+    expect(config.providers.deepseek.wire).toBe('anthropic')
+    expect(config.providers.glm.wire).toBe('anthropic')
+    expect(config.providers.custom.wire).toBe('openai')
+  })
+
+  test('非法/缺失 wire 值一律回落 anthropic（旧配置零破坏升级）', () => {
+    const config = normalizeAppConfig(
+      {
+        providers: {
+          custom: { baseUrl: 'https://gw.example.com/anthropic' },
+          deepseek: { baseUrl: 'https://api.deepseek.com/anthropic', wire: 'grpc' },
+        },
+      },
+      '/Users/tester',
+    )
+
+    expect(config.providers.custom.wire).toBe('anthropic')
+    expect(config.providers.deepseek.wire).toBe('anthropic')
+  })
+
+  test('切 wire（anthropic → openai）→ 该渠道验证快照自愈清空，需重新验证', () => {
+    const withKey = markProviderApiKeyUpdated(
+      normalizeAppConfig(LEGACY_DEEPSEEK, '/Users/tester'),
+      'deepseek',
+      '2026-06-04T01:00:00.000Z',
+    )
+    const verified = markModelEntryVerified(withKey, 'deepseek/deepseek-v4-pro', '2026-06-04T01:05:00.000Z')
+    expect(isModelServiceVerified(verified)).toBe(true)
+
+    // custom 渠道同理更有意义，但 deepseek 已被 normalizeWire 强制 anthropic——用 custom 验证同语义：
+    const customVerified = normalizeAppConfig(
+      {
+        apiKeyMetadata: { custom: { updatedAt: '2026-08-01T00:00:00.000Z' } },
+        providers: { custom: { baseUrl: 'https://gw.example.com/v1', wire: 'openai' } },
+        modelPool: [
+          {
+            provider: 'custom',
+            modelId: 'some-model',
+            verification: {
+              verifiedAt: '2026-08-02T00:00:00.000Z',
+              apiKeyUpdatedAt: '2026-08-01T00:00:00.000Z',
+              baseUrl: 'https://gw.example.com/v1',
+              wire: 'anthropic',
+            },
+          },
+        ],
+      },
+      '/Users/tester',
+    )
+
+    // 快照 wire=anthropic 与当前 openai 不符 → 清空。
+    expect(customVerified.modelPool[0]?.verification).toBeNull()
+  })
+
+  test('旧验证快照无 wire 字段按 anthropic 读取：渠道仍是 anthropic 则保持有效', () => {
+    const config = normalizeAppConfig(
+      {
+        apiKeyMetadata: { deepseek: { updatedAt: '2026-08-01T00:00:00.000Z' } },
+        modelPool: [
+          {
+            provider: 'deepseek',
+            modelId: 'deepseek-v4-pro',
+            verification: {
+              verifiedAt: '2026-08-02T00:00:00.000Z',
+              apiKeyUpdatedAt: '2026-08-01T00:00:00.000Z',
+              baseUrl: 'https://api.deepseek.com/anthropic',
+            },
+          },
+        ],
+      },
+      '/Users/tester',
+    )
+
+    expect(config.modelPool[0]?.verification).toEqual({
+      verifiedAt: '2026-08-02T00:00:00.000Z',
+      apiKeyUpdatedAt: '2026-08-01T00:00:00.000Z',
+      baseUrl: 'https://api.deepseek.com/anthropic',
+      wire: 'anthropic',
+    })
   })
 })

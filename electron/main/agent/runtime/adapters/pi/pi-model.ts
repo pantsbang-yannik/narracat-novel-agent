@@ -1,10 +1,10 @@
 /**
  * Provider 装配（模型池化切片①）：AppConfig → Pi 自定义 Model 描述，主力/轻量槽驱动
  * （shared/lib/model-slots 的 resolvePrimaryModel/resolveLightModel）。
- * 决策依据 spec §5.2「默认保留各家 Anthropic 兼容端点」：api 恒为 anthropic-messages +
- * 自定 baseUrl，保住 P1B 在 anthropic wire 上的全部调优与前缀缓存；换 pi-ai 原生 wire
- * 是 A/B 质量门之后的显式决策。不写 models.json 文件——Model 对象直接传 createAgentSession
- * （spike 报告实测形态）。
+ * wire 推导（spec §5.2 演进）：anthropic wire 恒为 anthropic-messages + 自定 baseUrl，保住
+ * P1B 在 anthropic wire 上的全部调优与前缀缓存；custom 渠道可显式选 openai wire
+ * （Chat Completions /chat/completions，pi-ai 的 openai-completions 实现直取 model.baseUrl）。
+ * 不写 models.json 文件——Model 对象直接传 createAgentSession（spike 报告实测形态）。
  */
 import type { Model } from '@mariozechner/pi-ai'
 import type { AppConfig } from '@shared/types/config'
@@ -18,6 +18,9 @@ const DEFAULT_CONTEXT_WINDOW = 200_000
  * 由事件映射 fail-loud（生产接线门前项①）。 */
 const DEFAULT_MAX_TOKENS = 32_000
 const ANTHROPIC_OFFICIAL_BASE_URL = 'https://api.anthropic.com'
+
+/** 可选 wire 支持的 Model 泛型：anthropic-messages（默认）或 openai-completions（custom 渠道可选）。 */
+export type PiModelWire = 'anthropic-messages' | 'openai-completions'
 
 /**
  * 子 agent frontmatter 的 model 别名 → 槽位（模型池化）：opus/sonnet 继承 run 模型（主力槽），
@@ -33,14 +36,19 @@ export function resolvePiModelAlias(config: AppConfig, alias: string | undefined
   return light.modelId === primary.modelId ? undefined : light.modelId
 }
 
-export function createPiModel(config: AppConfig, explicitId?: string): Model<'anthropic-messages'> {
+export function createPiModel(config: AppConfig, explicitId?: string): Model<PiModelWire> {
   const primary = resolvePrimaryModel(config)
   if (!primary) throw new Error('未配置任何模型，无法构造 Pi 模型描述')
+  // openai wire 没有「官方默认端点」语义（custom 渠道必填 baseUrl）；空着打到 anthropic 官方端点
+  // 会得到一堆难懂的 404，提前拦下给出可操作提示。
+  if (primary.wire === 'openai' && !primary.baseUrl) {
+    throw new Error('OpenAI 协议渠道需要先在设置中填写接口地址（以 /v1 结尾，如 https://example.com/v1）。')
+  }
   const id = explicitId || primary.modelId
   return {
     id,
     name: id,
-    api: 'anthropic-messages',
+    api: primary.wire === 'openai' ? 'openai-completions' : 'anthropic-messages',
     provider: primary.provider,
     baseUrl: primary.baseUrl || ANTHROPIC_OFFICIAL_BASE_URL,
     reasoning: false,

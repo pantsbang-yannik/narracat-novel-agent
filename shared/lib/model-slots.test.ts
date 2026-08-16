@@ -23,6 +23,7 @@ function makeView(overrides: Partial<ModelSlotView> = {}): ModelSlotView {
           verifiedAt: '2026-08-02T00:00:00.000Z',
           apiKeyUpdatedAt: '2026-08-01T00:00:00.000Z',
           baseUrl: 'https://api.deepseek.com/anthropic',
+          wire: 'anthropic',
         },
       },
       { provider: 'glm', modelId: 'glm-4.5-air', verification: null },
@@ -60,18 +61,47 @@ describe('isEntryVerified', () => {
 
   test('provider 端点变化 → false', () => {
     const view = makeView({
-      providers: { ...DEFAULT_PROVIDER_SETTINGS, deepseek: { baseUrl: 'https://proxy.example.com' } },
+      providers: { ...DEFAULT_PROVIDER_SETTINGS, deepseek: { baseUrl: 'https://proxy.example.com', wire: 'anthropic' } },
     })
     expect(isEntryVerified(view, view.modelPool[0]!)).toBe(false)
+  })
+
+  test('provider wire 变化（anthropic → openai）→ false（切协议自动失效）', () => {
+    const view = makeView({
+      providers: { ...DEFAULT_PROVIDER_SETTINGS, deepseek: { baseUrl: 'https://proxy.example.com', wire: 'openai' } },
+    })
+    expect(isEntryVerified(view, view.modelPool[0]!)).toBe(false)
+  })
+
+  test('快照 wire 与当前一致（openai ↔ openai）→ true', () => {
+    const view = makeView({
+      providers: { ...DEFAULT_PROVIDER_SETTINGS, custom: { baseUrl: 'https://gw.example.com/v1', wire: 'openai' } },
+      modelPool: [
+        {
+          provider: 'custom',
+          modelId: 'some-model',
+          verification: {
+            verifiedAt: '2026-08-02T00:00:00.000Z',
+            apiKeyUpdatedAt: '2026-08-01T00:00:00.000Z',
+            baseUrl: 'https://gw.example.com/v1',
+            wire: 'openai',
+          },
+        },
+      ],
+      primaryModelKey: 'custom/some-model',
+      apiKeyMetadata: { custom: { updatedAt: '2026-08-01T00:00:00.000Z' } },
+    })
+    expect(isEntryVerified(view, view.modelPool[0]!)).toBe(true)
   })
 })
 
 describe('resolvePrimaryModel', () => {
-  test('解析主力槽：key/provider/baseUrl/modelId/verified 齐全', () => {
+  test('解析主力槽：key/provider/baseUrl/wire/modelId/verified 齐全', () => {
     expect(resolvePrimaryModel(makeView())).toEqual({
       key: 'deepseek/deepseek-v4-pro',
       provider: 'deepseek',
       baseUrl: 'https://api.deepseek.com/anthropic',
+      wire: 'anthropic',
       modelId: 'deepseek-v4-pro',
       verified: true,
     })
@@ -112,6 +142,7 @@ describe('resolveLightModel', () => {
         verifiedAt: '2026-08-02T00:00:00.000Z',
         apiKeyUpdatedAt: '2026-08-01T00:00:00.000Z',
         baseUrl: 'https://open.bigmodel.cn/api/anthropic',
+        wire: 'anthropic',
       },
     }
     expect(resolveLightModel(view)?.key).toBe('glm/glm-4.5-air')
@@ -141,6 +172,7 @@ describe('buildPoolEntry', () => {
       verifiedAt: '2026-08-02T00:00:00.000Z',
       apiKeyUpdatedAt: '2026-08-01T00:00:00.000Z',
       baseUrl: 'https://open.bigmodel.cn/api/anthropic',
+      wire: 'anthropic' as const,
     }
     const view = makeView({
       modelPool: [{ provider: 'glm', modelId: 'glm-4.5-air', verification: snapshot }],
@@ -169,6 +201,7 @@ describe('buildPoolEntry', () => {
             verifiedAt: '2026-08-02T00:00:00.000Z',
             apiKeyUpdatedAt: '2026-07-01T00:00:00.000Z', // 陈旧代际
             baseUrl: 'https://open.bigmodel.cn/api/anthropic',
+            wire: 'anthropic',
           },
         },
       ],

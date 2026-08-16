@@ -50,7 +50,7 @@ import { useNovelStore } from '@/lib/novel-store'
 import { createLoadIssue } from '@/lib/load-state'
 import { resolveSettingsReturnTarget } from '@/lib/work-location'
 import { applyConfigCommit, mergeProviderDraft, shouldWarnPrimaryModelDisabled } from '@/lib/settings-config'
-import { POOL_DEFAULT_FIELDS } from '@shared/types/config'
+import { POOL_DEFAULT_FIELDS, type WireId } from '@shared/types/config'
 import type {
   AppConfig,
   ConnectionTestResult,
@@ -340,9 +340,26 @@ export function SettingsRoute() {
   function onModelBaseUrlChange(baseUrl: string) {
     if (!modelSub) return
     // 端点是打字输入，不逐键落盘——下一次「测试连接」（onTestConnection）落盘会带上它。
+    // 展开保留 wire：协议与地址同属端点草稿，只写 baseUrl 会把本地 wire 抹掉。
     setConfig((current) => ({
       ...current,
-      providers: { ...current.providers, [modelSub]: { baseUrl } },
+      providers: {
+        ...current.providers,
+        [modelSub]: { ...current.providers[modelSub], baseUrl },
+      },
+    }))
+  }
+
+  // 切换接口协议：离散操作即时落盘（与切槽位同语义）。落盘后 normalize 自愈会让该渠道
+  // 全部验证快照失效（wire 不符），用户需重新「测试连接」；会话指纹含 wire，旧对话同步失效。
+  function onModelWireChange(wire: WireId) {
+    if (!modelSub) return
+    void commitConfig((current) => ({
+      ...current,
+      providers: {
+        ...current.providers,
+        [modelSub]: { ...current.providers[modelSub], wire },
+      },
     }))
   }
 
@@ -688,6 +705,7 @@ export function SettingsRoute() {
                     onSaveApiKey={onSaveApiKey}
                     onDeleteApiKey={onDeleteApiKey}
                     onBaseUrlChange={onModelBaseUrlChange}
+                    onWireChange={onModelWireChange}
                     onTestConnection={onTestConnection}
                     onRefreshModels={onRefreshModels}
                     onToggleModel={onToggleModel}

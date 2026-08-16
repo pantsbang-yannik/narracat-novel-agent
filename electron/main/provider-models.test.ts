@@ -42,3 +42,43 @@ describe('fetchProviderModels', () => {
     expect((await fetchProviderModels({ baseUrl: 'https://x.example', apiKey: 'k' }, fakeFetch({ body: { whatever: 1 } }))).ok).toBe(false)
   })
 })
+
+describe('fetchProviderModels（双 wire）', () => {
+  test('openai wire：GET {base}/models（/v1 结尾不重拼）+ Bearer 头', async () => {
+    let requested = ''
+    let authHeader = ''
+    const spy: typeof fetch = (async (url: unknown, init?: RequestInit) => {
+      requested = String(url)
+      authHeader = String((init?.headers as Record<string, string>).Authorization)
+      return { ok: true, status: 200, json: async () => ({ data: [{ id: 'gpt-x' }] }) } as Response
+    }) as typeof fetch
+    const result = await fetchProviderModels(
+      { baseUrl: 'https://gw.example.com/v1', apiKey: 'sk-x', wire: 'openai' },
+      spy,
+    )
+    expect(requested).toBe('https://gw.example.com/v1/models')
+    expect(authHeader).toBe('Bearer sk-x')
+    expect(result).toEqual({ ok: true, models: ['gpt-x'] })
+  })
+
+  test('openai wire 缺 baseUrl → ok:false（无「官方默认端点」语义，不猜测）', async () => {
+    const spy: typeof fetch = (async () => {
+      throw new Error('不该发请求')
+    }) as typeof fetch
+    const result = await fetchProviderModels({ baseUrl: '', apiKey: 'k', wire: 'openai' }, spy)
+    expect(result.ok).toBe(false)
+  })
+
+  test('anthropic wire（默认/显式）：GET {base}/v1/models + x-api-key 头', async () => {
+    let requested = ''
+    let headerKey = ''
+    const spy: typeof fetch = (async (url: unknown, init?: RequestInit) => {
+      requested = String(url)
+      headerKey = String((init?.headers as Record<string, string>)['x-api-key'])
+      return { ok: true, status: 200, json: async () => ({ data: [] }) } as Response
+    }) as typeof fetch
+    await fetchProviderModels({ baseUrl: 'https://api.deepseek.com/anthropic', apiKey: 'sk-x', wire: 'anthropic' }, spy)
+    expect(requested).toBe('https://api.deepseek.com/anthropic/v1/models')
+    expect(headerKey).toBe('sk-x')
+  })
+})

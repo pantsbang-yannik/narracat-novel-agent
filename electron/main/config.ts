@@ -6,15 +6,17 @@ import {
   DEFAULT_MODEL_POOL,
   DEFAULT_PROVIDER_SETTINGS,
   PROVIDER_IDS,
+  WIRE_IDS,
   type AppConfig,
   type ModelEntryVerification,
   type ModelPoolEntry,
   type ProviderApiKeyMetadata,
   type ProviderId,
   type ProviderSettings,
+  type WireId,
 } from '@shared/types/config'
 
-export { DEFAULT_MODEL_POOL, DEFAULT_PROVIDER_SETTINGS, PROVIDER_IDS }
+export { DEFAULT_MODEL_POOL, DEFAULT_PROVIDER_SETTINGS, PROVIDER_IDS, WIRE_IDS }
 export type {
   AppConfig,
   ModelEntryVerification,
@@ -22,6 +24,7 @@ export type {
   ProviderApiKeyMetadata,
   ProviderId,
   ProviderSettings,
+  WireId,
 } from '@shared/types/config'
 
 const MAX_RECENT_NOVELS = 20
@@ -95,6 +98,15 @@ function normalizeBaseUrl(provider: ProviderId, value: unknown): string {
   }
 
   return DEFAULT_PROVIDER_SETTINGS[provider].baseUrl
+}
+
+/**
+ * wire 归一化：openai 仅对 custom 渠道开放，其余渠道（含手改配置文件）一律回落
+ * anthropic——内置四家只有 Anthropic 兼容端点，错配会直接打崩分。非法缺失值同样回落
+ * （型配置零破坏升级）。
+ */
+function normalizeWire(provider: ProviderId, value: unknown): WireId {
+  return value === 'openai' && provider === 'custom' ? 'openai' : 'anthropic'
 }
 
 function normalizeModels(provider: ProviderId, value: unknown): LegacyModelMapping {
@@ -195,7 +207,10 @@ function normalizeProviderSettings(value: unknown): Record<ProviderId, ProviderS
   const providers = {} as Record<ProviderId, ProviderSettings>
   for (const provider of PROVIDER_IDS) {
     const item = isRecord(input[provider]) ? (input[provider] as Record<string, unknown>) : {}
-    providers[provider] = { baseUrl: normalizeBaseUrl(provider, item.baseUrl) }
+    providers[provider] = {
+      baseUrl: normalizeBaseUrl(provider, item.baseUrl),
+      wire: normalizeWire(provider, item.wire),
+    }
   }
   return providers
 }
@@ -229,7 +244,10 @@ function normalizeModelPool(
   return pool
 }
 
-/** 验证快照自愈：Key 代际或端点与当前不符 → 直接清空（与旧 normalizeModelServiceVerification 同哲学）。 */
+/**
+ * 验证快照自愈：Key 代际或端点（baseUrl/wire）与当前不符 → 直接清空（与旧 normalizeModelServiceVerification 同哲学）。
+ * 旧快照无 wire 字段按 'anthropic' 读取（legacy 兼容）：渠道仍是 anthropic 则保持有效，已切 openai 则失效重验。
+ */
 function normalizeEntryVerification(
   value: unknown,
   provider: ProviderId,
@@ -242,10 +260,12 @@ function normalizeEntryVerification(
   const verifiedAt = asTrimmedString(value.verifiedAt)
   const apiKeyUpdatedAt = asTrimmedString(value.apiKeyUpdatedAt)
   const baseUrl = typeof value.baseUrl === 'string' ? value.baseUrl : null
+  const wire = normalizeWire(provider, value.wire)
   if (!verifiedAt || !apiKeyUpdatedAt || baseUrl === null) return null
   if (context.apiKeyMetadata[provider]?.updatedAt !== apiKeyUpdatedAt) return null
   if (context.providers[provider].baseUrl !== baseUrl) return null
-  return { verifiedAt, apiKeyUpdatedAt, baseUrl }
+  if (context.providers[provider].wire !== wire) return null
+  return { verifiedAt, apiKeyUpdatedAt, baseUrl, wire }
 }
 
 function normalizeSlotKey(value: unknown, pool: ModelPoolEntry[]): string | null {
@@ -282,6 +302,8 @@ export function normalizeAppConfig(value: unknown, homeDir = homedir()): AppConf
           verifiedAt: legacyVerification.verifiedAt,
           apiKeyUpdatedAt: legacyVerification.apiKeyUpdatedAt,
           baseUrl: legacyBaseUrl,
+          // legacy 配置只可能是 anthropic wire（normalizeWire 对非 custom 渠道强制回落）
+          wire: providers[legacyProvider].wire,
         }
       : null
     const ids: string[] = []
@@ -386,7 +408,7 @@ export function clearProviderApiKeyMetadata(config: AppConfig, provider: Provide
   })
 }
 
-/** 按条目写验证快照：绑定当前 Key 代际与端点。Key 未配置或条目不存在则原样返回（保持未验证）。 */
+/** 按条目写验证快照：绑定当前 Key 代际与端点（baseUrl + wire）。Key 未配置或条目不存在则原样返回（保持未验证）。 */
 export function markModelEntryVerified(config: AppConfig, modelKey: string, verifiedAt: string): AppConfig {
   const normalized = normalizeAppConfig(config)
   const entry = findPoolEntry(normalized, modelKey)
@@ -402,6 +424,7 @@ export function markModelEntryVerified(config: AppConfig, modelKey: string, veri
               verifiedAt,
               apiKeyUpdatedAt,
               baseUrl: normalized.providers[item.provider].baseUrl,
+              wire: normalized.providers[item.provider].wire,
             },
           }
         : item,
@@ -414,11 +437,11 @@ export function markProviderVerified(config: AppConfig, provider: ProviderId, ve
   const normalized = normalizeAppConfig(config)
   const apiKeyUpdatedAt = normalized.apiKeyMetadata[provider]?.updatedAt
   if (!apiKeyUpdatedAt) return normalized
-  const baseUrl = normalized.providers[provider].baseUrl
+  const { baseUrl, wire } = normalized.providers[provider]
   return normalizeAppConfig({
     ...normalized,
     modelPool: normalized.modelPool.map((entry) =>
-      entry.provider === provider ? { ...entry, verification: { verifiedAt, apiKeyUpdatedAt, baseUrl } } : entry,
+      entry.provider === provider ? { ...entry, verification: { verifiedAt, apiKeyUpdatedAt, baseUrl, wire } } : entry,
     ),
   })
 }

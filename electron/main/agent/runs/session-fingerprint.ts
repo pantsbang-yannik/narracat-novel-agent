@@ -32,8 +32,11 @@ export async function createAgentSessionCompatibilityFingerprint(
   const normalized = {
     projectId: input.projectId?.trim() || null,
     projectPath: canonicalProjectPath?.normalize('NFC') ?? null,
-    // 模型池化：指纹绑定「解析后的主力/轻量」而非整份池——池增删不影响会话，切槽位才断
-    primaryModel: primary ? { provider: primary.provider, baseUrl: primary.baseUrl, modelId: primary.modelId } : null,
+    // 模型池化：指纹绑定「解析后的主力/轻量」而非整份池——池增删不影响会话，切槽位才断。
+    // wire 纳入指纹：切协议（anthropic/openai）换 wire 语义，旧会话必须失效（提示开新对话）。
+    primaryModel: primary
+      ? { provider: primary.provider, baseUrl: primary.baseUrl, wire: primary.wire, modelId: primary.modelId }
+      : null,
     lightModel: light ? { provider: light.provider, modelId: light.modelId } : null,
     apiKeyGeneration: primary ? (input.config.apiKeyMetadata[primary.provider]?.updatedAt ?? null) : null,
     agentCoreVersion: input.agentCoreVersion,

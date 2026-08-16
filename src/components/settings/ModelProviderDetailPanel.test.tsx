@@ -54,6 +54,7 @@ function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
           verifiedAt: '2026-08-01T10:00:00.000Z',
           apiKeyUpdatedAt: '2026-08-01T09:00:00.000Z',
           baseUrl: DEFAULT_PROVIDER_SETTINGS.deepseek.baseUrl,
+          wire: 'anthropic',
         },
       },
     ],
@@ -84,6 +85,7 @@ function noopProps(overrides: Record<string, unknown> = {}) {
     onSaveApiKey: () => {},
     onDeleteApiKey: () => {},
     onBaseUrlChange: () => {},
+    onWireChange: () => {},
     onTestConnection: () => {},
     onRefreshModels: () => {},
     onToggleModel: () => {},
@@ -146,7 +148,7 @@ describe('ModelProviderDetailPanel（SSR 结构断言）', () => {
     const html = render({
       provider: 'anthropic',
       config: baseConfig({
-        providers: { ...DEFAULT_PROVIDER_SETTINGS, anthropic: { baseUrl: '' } },
+        providers: { ...DEFAULT_PROVIDER_SETTINGS, anthropic: { baseUrl: '', wire: 'anthropic' } },
         modelPool: [{ provider: 'anthropic', modelId: 'claude-opus-4-7', verification: null }],
         primaryModelKey: 'anthropic/claude-opus-4-7',
         apiKeyMetadata: {},

@@ -22,19 +22,19 @@ function mockElectron(electron: Record<string, unknown>): void {
   })
 }
 
-// 验证语义已随模型池化迁到「主力槽条目的验证快照与当前 Key 代际/端点一致」（resolvePrimaryModel
+// 验证语义已随模型池化迁到「主力槽条目的验证快照与当前 Key 代际/端点/wire 一致」（resolvePrimaryModel
 // + isEntryVerified，见 shared/lib/model-slots.ts），不再是全局 modelServiceVerification 字段。
 function verifiedConfigPayload(verified: boolean) {
   const baseUrl = 'https://api.deepseek.com/anthropic'
   const apiKeyUpdatedAt = '2026-01-01T00:00:00.000Z'
   return {
     config: {
-      providers: { deepseek: { baseUrl } },
+      providers: { deepseek: { baseUrl, wire: 'anthropic' } },
       modelPool: [
         {
           provider: 'deepseek',
           modelId: 'deepseek-v4-pro',
-          verification: verified ? { verifiedAt: 'now', apiKeyUpdatedAt, baseUrl } : null,
+          verification: verified ? { verifiedAt: 'now', apiKeyUpdatedAt, baseUrl, wire: 'anthropic' } : null,
         },
       ],
       primaryModelKey: 'deepseek/deepseek-v4-pro',
