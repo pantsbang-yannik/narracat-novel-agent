@@ -10,6 +10,15 @@ describe('WorkbenchRoute', () => {
     expect(source).not.toContain('<CheckpointResumeBanner')
   })
 
+  test('keeps the stale-load recovery banner clear of the Windows caption buttons', () => {
+    // stale 横幅 absolute 悬浮在舞台上（含 Agent 栏顶部），右端若只退 right-4 会伸进
+    // min/max/close 的 caption 区——再进入项目刷新失败时横幅被窗口按钮压住（Windows 适配盲区）。
+    const source = readFileSync(fileURLToPath(new URL('./workbench.tsx', import.meta.url)), 'utf-8')
+
+    expect(source).toContain('right-[max(1rem,var(--titlebar-inset-right))]')
+    expect(source).not.toContain('absolute left-4 right-4 top-4')
+  })
+
   test('uses one pixel-based resizable workbench grid for sidebar content and Agent widths', () => {
     const source = readFileSync(fileURLToPath(new URL('./workbench.tsx', import.meta.url)), 'utf-8')
 

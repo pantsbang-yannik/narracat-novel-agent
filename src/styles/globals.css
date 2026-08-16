@@ -92,7 +92,9 @@
 /*
  * 平台感知顶栏预留（main.tsx 把主进程平台写到 <html data-platform>）：
  * - darwin：左上角红绿灯按钮区，顶栏左内容需让位（约 112px，与 trafficLightPosition x:18 匹配）
- * - win32：右上角系统 caption 按钮（最小化/最大化/关闭，约 138px 宽），顶栏右内容需让位
+ * - win32：右上角系统 caption 按钮（最小化/最大化/关闭）。
+ *   注意 150px 是 100% 缩放下的回退值；main.tsx 会用 Window Controls Overlay API
+ *   实测 caption 宽度写内联变量覆盖它（125%/150% 缩放下按钮更宽，硬编码会漏）。
  * 其余平台无自绘按钮，两侧均为 0。顶栏组件用 pl/pr-[var(--titlebar-inset-left/right)] 消费。
  */
 :root {

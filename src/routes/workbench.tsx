@@ -392,9 +392,11 @@ export function WorkbenchRoute() {
         data-workbench-content-panel="true"
       >
         {stage}
+        {/* stale 横幅横跨整个舞台（含 Agent 栏），右端必须给 Windows caption 按钮让位，
+            否则再进入项目刷新失败时，提示会钻到 min/max/close 底下（Windows 适配盲区）。 */}
         {workbenchLoad.status === 'stale' && workbenchLoad.issue ? (
           <LoadRecoveryNotice
-            className="absolute left-4 right-4 top-4 z-30 shadow-[var(--shadow-floating)]"
+            className="absolute left-4 right-[max(1rem,var(--titlebar-inset-right))] top-4 z-30 shadow-[var(--shadow-floating)]"
             compact
             from={`/workbench?${searchParams.toString()}`}
             issue={workbenchLoad.issue}

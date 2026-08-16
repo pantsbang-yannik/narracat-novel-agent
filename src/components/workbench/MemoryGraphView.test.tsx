@@ -81,6 +81,19 @@ describe('MemoryGraphView', () => {
     expect(html).toContain('aria-label="全屏查看星图"')
   })
 
+  test('keeps the fullscreen toggle clear of the Windows caption buttons', () => {
+    // 记忆星图是全宽板块（卡片右缘≈窗口右缘，全屏态更是贴边），右上角按钮只退 right-3
+    // 会直接压进 min/max/close 的 caption 区。让位量走 --titlebar-inset-right，
+    // main.tsx 用 WCO API 实测宽度覆盖，150px 回退值兜底。
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <MemoryGraphView projectPath="/p" initialGraph={populatedGraph} />
+      </TooltipProvider>,
+    )
+
+    expect(html).toContain('right-[calc(var(--titlebar-inset-right)+0.75rem)]')
+  })
+
   test('keeps the graph frame out of the frameless window drag region', () => {
     // 真机走查抓到：全屏后右上角退出按钮点不动。窗口是 titleBarStyle:'hidden'，Agent 面板
     // 头部那条 h-14 拖拽带横在窗口右上角；拖拽区按几何计算，上层不声明 no-drag 就挖不掉
