@@ -17,14 +17,15 @@ export function AppShell({ navStart, navCenter, navEnd, children }: AppShellProp
     <div className={`${APP_CANVAS_CLASS} flex h-full flex-col`}>
       {/* 顶部 nav：只承担拖拽和轻量导航，不再作为一块有边框的独立 surface。
           左右 padding 平台感知：mac 给左上角红绿灯让位（--titlebar-inset-left），
-          Windows 给右上角系统 caption 按钮让位（--titlebar-inset-right）。 */}
+          Windows 给右上角系统 caption 按钮让位（--titlebar-inset-right），
+          再加 0.75rem 呼吸位——caption 与 navEnd 图标只隔让位线会读成一团（视觉混排）。 */}
       <header
         className={`
           ${APP_HEADER_CLASS}
           relative flex items-center justify-between
           h-14 shrink-0
           pl-[max(1rem,var(--titlebar-inset-left))]
-          pr-[max(1rem,var(--titlebar-inset-right))]
+          pr-[max(1rem,calc(var(--titlebar-inset-right)+0.75rem))]
           [-webkit-app-region:drag]
         `}
       >

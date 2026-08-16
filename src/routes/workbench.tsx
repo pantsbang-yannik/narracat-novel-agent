@@ -49,7 +49,8 @@ function WorkbenchRouteState({
   title: string
 }) {
   return (
-    <main className="h-full min-h-0 min-w-0 flex-1 p-3 pt-0">
+    // 顶部 padding 平台感知：win32 下让状态卡也从 caption 带下方开始（方案 A 上下分区）。
+    <main className="h-full min-h-0 min-w-0 flex-1 p-3 pt-[max(0px,var(--titlebar-gutter-top))]">
       <div className={`${WORKSPACE_STATE_CLASS} flex h-full min-h-0 items-center justify-center p-6`}>
         <div className="max-w-sm text-center">
           <Icon className="mx-auto mb-3 size-5 text-hint-foreground" />
@@ -393,10 +394,11 @@ export function WorkbenchRoute() {
       >
         {stage}
         {/* stale 横幅横跨整个舞台（含 Agent 栏），右端必须给 Windows caption 按钮让位，
-            否则再进入项目刷新失败时，提示会钻到 min/max/close 底下（Windows 适配盲区）。 */}
+            否则再进入项目刷新失败时，提示会钻到 min/max/close 底下（Windows 适配盲区）。
+            top 同理：横幅 absolute 锚在 content panel（y=0 起），win32 下压到 caption 带下方再出现。 */}
         {workbenchLoad.status === 'stale' && workbenchLoad.issue ? (
           <LoadRecoveryNotice
-            className="absolute left-4 right-[max(1rem,var(--titlebar-inset-right))] top-4 z-30 shadow-[var(--shadow-floating)]"
+            className="absolute left-4 right-[max(1rem,var(--titlebar-inset-right))] top-[max(1rem,calc(var(--titlebar-gutter-top)+0.25rem))] z-30 shadow-[var(--shadow-floating)]"
             compact
             from={`/workbench?${searchParams.toString()}`}
             issue={workbenchLoad.issue}

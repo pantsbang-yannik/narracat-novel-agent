@@ -16,7 +16,17 @@ describe('WorkbenchRoute', () => {
     const source = readFileSync(fileURLToPath(new URL('./workbench.tsx', import.meta.url)), 'utf-8')
 
     expect(source).toContain('right-[max(1rem,var(--titlebar-inset-right))]')
+    expect(source).toContain('top-[max(1rem,calc(var(--titlebar-gutter-top)+0.25rem))]')
     expect(source).not.toContain('absolute left-4 right-4 top-4')
+  })
+
+  test('drops the stage cards below the Windows caption band (win32 gutter)', () => {
+    // 方案 A 上下分区：win32 下舞台/状态卡顶部 padding 消费 --titlebar-gutter-top（56px），
+    // caption 按钮悬于 canvas gutter 上，不再压 Agent 面板头部白底（视觉混排根因）。
+    const source = readFileSync(fileURLToPath(new URL('./workbench.tsx', import.meta.url)), 'utf-8')
+
+    expect(source).toContain('pt-[max(0px,var(--titlebar-gutter-top))]')
+    expect(source).not.toContain('flex-1 p-3 pt-0')
   })
 
   test('uses one pixel-based resizable workbench grid for sidebar content and Agent widths', () => {

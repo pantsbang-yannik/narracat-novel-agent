@@ -615,7 +615,9 @@ export function SettingsRoute() {
         returnTo={returnTo}
       />
 
-      <main className="min-h-0 min-w-0 flex-1 p-3" data-settings-stage="true">
+      {/* 顶部 padding 平台感知：win32 下内容卡从 caption 带下方开始（方案 A 上下分区，
+          与工作台舞台同构；左栏保持通顶）。 */}
+      <main className="min-h-0 min-w-0 flex-1 px-3 pb-3 pt-[max(0.75rem,var(--titlebar-gutter-top))]" data-settings-stage="true">
         <section
           className={`${WORKSPACE_SHELL_CLASS} flex h-full min-h-0 flex-col overflow-hidden`}
           data-settings-content-shell="true"
