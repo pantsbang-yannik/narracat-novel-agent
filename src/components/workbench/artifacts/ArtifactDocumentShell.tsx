@@ -8,7 +8,7 @@ import { Disclosure } from '@/components/ui/disclosure'
 import { countBodyChars } from '@/lib/word-count'
 
 const DETAILS_SUMMARY_CLASS =
-  'flex min-h-10 w-full cursor-pointer list-none select-none items-center py-2 text-sm font-medium text-hint-foreground [&::-webkit-details-marker]:hidden'
+  'flex min-h-10 w-full cursor-pointer select-none items-center py-2 text-sm font-medium text-hint-foreground'
 const DETAILS_BODY_CLASS = 'pb-3'
 const DETAILS_PANEL_CLASS = 'group border-t border-border text-xs text-muted-foreground'
 const DETAIL_ROW_CLASS =
@@ -327,7 +327,7 @@ function countReadableUnits(content: string): string {
 
 function DetailSummary({ children }: { children: ReactNode }) {
   return (
-    <span className={`${DETAILS_SUMMARY_CLASS} w-auto`}>
+    <span className={DETAILS_SUMMARY_CLASS}>
       <ChevronRight
         aria-hidden="true"
         className="mr-2 size-4 shrink-0 transition-transform group-open:rotate-90"

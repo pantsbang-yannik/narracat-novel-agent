@@ -42,7 +42,7 @@ export function Disclosure({
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full cursor-pointer select-none items-center text-left [&::-webkit-details-marker]:hidden"
+        className="flex w-full cursor-pointer select-none items-center text-left"
       >
         {summaryContent}
       </button>

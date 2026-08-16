@@ -15,7 +15,7 @@ const TYPE_LABELS: Record<string, string> = {
 // 折叠区排版对齐 ArtifactDocumentShell 既有「文件信息」/「本章总结」折叠区（同一套 details/summary 词汇）。
 const DETAILS_PANEL_CLASS = 'group border-t border-border text-xs text-muted-foreground'
 const DETAILS_SUMMARY_CLASS =
-  'flex min-h-10 w-full cursor-pointer list-none select-none items-center py-2 text-sm font-medium text-hint-foreground [&::-webkit-details-marker]:hidden'
+  'flex min-h-10 w-full cursor-pointer select-none items-center py-2 text-sm font-medium text-hint-foreground'
 const DETAILS_BODY_CLASS = 'space-y-1.5 pb-3'
 const ENTRY_ROW_CLASS =
   'flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border/60 py-1.5 last:border-b-0'

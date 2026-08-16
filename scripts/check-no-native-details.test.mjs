@@ -1,5 +1,16 @@
 import { describe, expect, test } from 'bun:test'
-import { collectNativeDetailsViolations } from './check-no-native-details.mjs'
+import { MIN_SCANNED_TSX, collectNativeDetailsViolations, scanCoverageFailure } from './check-no-native-details.mjs'
+
+describe('scanCoverageFailure（扫描范围自检）', () => {
+  test('扫到 0 个文件判失败——零文件不许静默打印 OK', () => {
+    expect(scanCoverageFailure(0)).toContain('只扫到 0 个 tsx')
+  })
+
+  test('低于下限判失败，达到下限放行', () => {
+    expect(scanCoverageFailure(MIN_SCANNED_TSX - 1)).not.toBeNull()
+    expect(scanCoverageFailure(MIN_SCANNED_TSX)).toBeNull()
+  })
+})
 
 describe('collectNativeDetailsViolations（Windows asar 冻结守卫）', () => {
   test('JSX <details>/<summary> 判违规（含自闭合与属性形态）', () => {

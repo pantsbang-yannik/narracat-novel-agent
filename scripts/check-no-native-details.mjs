@@ -9,12 +9,34 @@
 // 合并上游代码把原生 details 再带进来，在 Windows 打包版静默复发（dev/mac 都测不出来）。
 //
 // 用法：node scripts/check-no-native-details.mjs（退出码 1 = 有违规）。
+//
+// 解除条件：本守卫是为绕开引擎 bug 而设的临时纪律，不是永久设计约束。定位时的组合是
+// electron 41.2.1 / Chromium 146；将来升级 Electron 后，用一个纯净 <details> 在 Windows
+// 打包版（必须是 asar + file://，dev 与 mac 都测不出来）复测，若不再挂起，本脚本连同
+// package.json 里的 check:architecture 挂载可一并撤下，UI 回归原生 details。
 
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 const SRC_DIR = 'src'
 const DETAILS_RE = /<details[\s/>]|<\/details\s*>|<summary[\s/>]|<\/summary\s*>/
+
+/**
+ * 扫描范围下限。守卫必须真的扫到东西才算数：cwd 不在仓库根、src 改名或目录搬迁都会让扫描
+ * 范围塌成 0，而「零违规」恰好长得和「全部通过」一模一样——本仓在别处已经吃过这种静默通过
+ * 的亏（打包链断了两周靠陈旧产物假绿）。src 现有 181 个 tsx，取 50 作下限。
+ */
+export const MIN_SCANNED_TSX = 50
+
+/**
+ * 扫描范围自检（导出供测试）。
+ * @param {number} fileCount 实际扫到的 tsx 数量
+ * @returns {string | null} 错误文案；null = 覆盖面正常
+ */
+export function scanCoverageFailure(fileCount) {
+  if (fileCount >= MIN_SCANNED_TSX) return null
+  return `check-no-native-details: 只扫到 ${fileCount} 个 tsx（预期 ≥ ${MIN_SCANNED_TSX}）——扫描范围异常（cwd 不是仓库根？src 改名或搬迁？），守卫已形同虚设，先修扫描范围。`
+}
 
 /** 剥离 // 行注释与块注释（含 JSDoc/JSX 注释），正确跳过字符串字面量；保留换行以便报行号。 */
 function stripComments(content) {
@@ -122,6 +144,11 @@ export function collectNativeDetailsViolations({ files }) {
 
 function main() {
   const files = collectTsxFiles(SRC_DIR).map((path) => ({ path, content: readFileSync(path, 'utf-8') }))
+  const coverageFailure = scanCoverageFailure(files.length)
+  if (coverageFailure) {
+    console.error(coverageFailure)
+    process.exit(1)
+  }
   const violations = collectNativeDetailsViolations({ files })
   if (violations.length > 0) {
     console.error(`check-no-native-details: ${violations.length} 处 JSX 原生 <details>/<summary>（Windows asar 冻结风险）：`)
