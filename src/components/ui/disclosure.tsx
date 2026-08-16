@@ -5,15 +5,13 @@ import { cn } from '@/lib/cn'
  * 通用折叠面板（div + useState 实现，**不用原生 `<details>/<summary>`**）。
  *
  * 为什么禁用原生 details：Windows 打包版（asar + file://）实测渲染原生 `<details>` 元素会把
- * 渲染主线程挂死（无 CPU 的同步阻塞；dev 的非 asar 与 mac 均正常）——Chromium 41 引擎级
- * 问题，纯净 `<details>` 即可复现（2026-08-15 二分定位，见 settings.tsx 历史注释）。
+ * 渲染主线程挂死（无 CPU 的同步阻塞；dev 的非 asar 与 mac 均正常）——Electron 41.2.1（对应
+ * Chromium 146）引擎级问题，纯净 `<details>` 即可复现（2026-08-15 二分定位，见 settings.tsx 历史注释）。
  * 全库统一走本组件；`scripts/check-no-native-details.mjs` 守卫防回归。
  *
  * 语义对齐原生 details 的部分：
  * - 内容常驻 DOM，折叠仅 `hidden`（display:none）——SSR 测试可断言内部内容；
  * - 外层容器上仍渲染调用方传入的 data-*（测试锚点不变）。
- * 差异部分：`group-open:` 变体类不可用（无 open 属性），展开态箭头请用 render-prop 的
- * `open` 参数条件拼类（如 `open && 'rotate-90'`）。
  */
 export function Disclosure({
   summary,
@@ -33,11 +31,12 @@ export function Disclosure({
   return (
     // 外层在展开时显式输出 open 属性（div 上的非标准属性，React 原样透传）：CSS 属性选择器按
     // 「存在性」命中，存量 `group-open:*` 变体类（chevron 旋转等）因此原样生效，调用点零视觉
-    // 回归。折叠时刻意不输出（值 "false" 也会被 [open] 误匹配）。
+    // 回归。折叠时刻意不输出（值 "false" 也会被 [open] 误匹配）。注意值必须是布尔 true——
+    // React 19 把 open 当布尔属性处理，传空字符串 '' 会被判定为假而丢弃整个属性。
     <div
       className={cn('group', className)}
       {...props}
-      {...(open ? ({ open: '' } as Record<string, unknown>) : {})}
+      {...(open ? ({ open: true } as Record<string, unknown>) : {})}
     >
       <button
         type="button"

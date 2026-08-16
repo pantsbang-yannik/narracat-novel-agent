@@ -184,7 +184,7 @@ function AboutBetaNotice() {
  * 关于页诊断折叠（通用 Disclosure 的薄封装：钉住 data 锚点与摘要行样式）。
  *
  * 为什么不用原生 <details>：Windows 打包版（asar）实测渲染原生 details 元素会把渲染主线程
- * 挂死（无 CPU 的同步阻塞；dev 的非 asar file:// 与 mac 均正常）——Chromium 41 引擎级问题，
+ * 挂死（无 CPU 的同步阻塞；dev 的非 asar file:// 与 mac 均正常）——Electron 41.2.1（对应 Chromium 146）引擎级问题，
  * 与业务代码无关（纯净 <details> 即可复现）。全库统一走 ui/disclosure。
  */
 function AboutDiagnosticsDisclosure({ children }: { children: React.ReactNode }) {
@@ -844,7 +844,7 @@ export function SettingsRoute() {
                           </a>
                         </div>
                       </SettingsRow>
-                      {/* 规避 Chromium 41 在 Windows 打包版（asar）渲染原生 <details> 挂起主线程的
+                      {/* 规避 Electron 41.2.1（对应 Chromium 146）在 Windows 打包版（asar）渲染原生 <details> 挂起主线程的
                           引擎级 bug——换 ui/disclosure（AboutDiagnosticsDisclosure，功能 1:1）。 */}
                       <AboutDiagnosticsDisclosure>
                           <SettingsRow title="Agent Core lock">

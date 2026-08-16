@@ -1,6 +1,6 @@
 // 全库禁用原生 <details>/<summary> JSX（Windows asar 冻结守卫）。
 //
-// 背景：Chromium 41 在 Windows 打包版（asar + file://）渲染原生 <details> 元素会把渲染主线程
+// 背景：Electron 41.2.1（对应 Chromium 146）在 Windows 打包版（asar + file://）渲染原生 <details> 元素会把渲染主线程
 // 挂死（无 CPU 同步阻塞；dev 非 asar 与 mac 均正常）。2026-08-15 二分定位（纯净 <details>
 // 即可复现，与业务代码无关）。全库统一改走 src/components/ui/disclosure.tsx（div+useState，
 // 外层展开时输出 open 属性兼容 group-open:* 样式）。
