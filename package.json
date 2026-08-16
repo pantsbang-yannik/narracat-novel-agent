@@ -30,16 +30,16 @@
   },
   "build": {
     "appId": "app.narracat.desktop",
-    "artifactName": "NarraCat-${version}-mac-${arch}.${ext}",
-    "electronLanguages": [
-      "zh_CN",
-      "en"
-    ],
+    "artifactName": "NarraCat-${version}-${os}-${arch}.${ext}",
     "mac": {
       "icon": "build/icon.icns",
       "hardenedRuntime": true,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
+      "electronLanguages": [
+        "zh_CN",
+        "en"
+      ],
       "target": [
         {
           "target": "dmg",
@@ -53,6 +53,12 @@
             "arm64"
           ]
         }
+      ]
+    },
+    "win": {
+      "electronLanguages": [
+        "zh-CN",
+        "en-US"
       ]
     },
     "dmg": {
