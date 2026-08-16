@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -81,17 +83,24 @@ describe('MemoryGraphView', () => {
     expect(html).toContain('aria-label="全屏查看星图"')
   })
 
-  test('keeps the fullscreen toggle clear of the Windows caption buttons', () => {
-    // 记忆星图是全宽板块（卡片右缘≈窗口右缘，全屏态更是贴边），右上角按钮只退 right-3
-    // 会直接压进 min/max/close 的 caption 区。让位量走 --titlebar-inset-right，
-    // main.tsx 用 WCO API 实测宽度覆盖，150px 回退值兜底。
+  test('positions the fullscreen toggle by mode: card edge normally, clear of caption when fullscreen', () => {
+    // 方案 A（上下分区）后普通态卡片在 caption 带下方，按钮贴卡片右缘（right-3）即可——
+    // 固定带 inset 会把按钮无辜推离右缘 145px。全屏态 fixed inset-0 盖住整个窗口
+    // （含 caption 带），仍须给 min/max/close 让位（WCO 实测宽度覆盖，150px 回退兜底）。
     const html = renderToStaticMarkup(
       <TooltipProvider>
         <MemoryGraphView projectPath="/p" initialGraph={populatedGraph} />
       </TooltipProvider>,
     )
+    const source = readFileSync(fileURLToPath(new URL('./MemoryGraphView.tsx', import.meta.url)), 'utf-8')
 
-    expect(html).toContain('right-[calc(var(--titlebar-inset-right)+0.75rem)]')
+    // 普通态：贴卡片右缘
+    expect(html).toContain('right-3')
+    expect(html).not.toContain('right-[calc(var(--titlebar-inset-right)+0.75rem)]')
+    // 全屏态：源码里保留 caption 让位条件分支
+    expect(source).toContain(
+      "fullscreen ? 'right-[calc(var(--titlebar-inset-right)+0.75rem)]' : 'right-3'",
+    )
   })
 
   test('keeps the graph frame out of the frameless window drag region', () => {

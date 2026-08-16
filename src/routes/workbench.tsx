@@ -393,12 +393,11 @@ export function WorkbenchRoute() {
         data-workbench-content-panel="true"
       >
         {stage}
-        {/* stale 横幅横跨整个舞台（含 Agent 栏），右端必须给 Windows caption 按钮让位，
-            否则再进入项目刷新失败时，提示会钻到 min/max/close 底下（Windows 适配盲区）。
-            top 同理：横幅 absolute 锚在 content panel（y=0 起），win32 下压到 caption 带下方再出现。 */}
+        {/* stale 横幅横跨整个舞台（含 Agent 栏）。方案 A 后横幅整体在 caption 带下方
+            （top 消费 --titlebar-gutter-top），右缘不再需要 --titlebar-inset-right 让位。 */}
         {workbenchLoad.status === 'stale' && workbenchLoad.issue ? (
           <LoadRecoveryNotice
-            className="absolute left-4 right-[max(1rem,var(--titlebar-inset-right))] top-[max(1rem,calc(var(--titlebar-gutter-top)+0.25rem))] z-30 shadow-[var(--shadow-floating)]"
+            className="absolute left-4 right-4 top-[max(1rem,calc(var(--titlebar-gutter-top)+0.25rem))] z-30 shadow-[var(--shadow-floating)]"
             compact
             from={`/workbench?${searchParams.toString()}`}
             issue={workbenchLoad.issue}
