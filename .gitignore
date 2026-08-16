@@ -29,21 +29,22 @@ corpus-factory-data/
 # Superpowers工具的临时产物
 .superpowers/
 # --- private assets: never commit (spec 2026-08-04 open-source-prep) ---
-CLAUDE.md
-AGENTS.md
-CONTEXT.md
+# 2026-08-16：本仓升格为唯一开发仓，工程契约文档（CLAUDE.md / CONTEXT.md / AGENTS.md / docs/adr / docs/agents
+# / agent-core 引擎文档）已随代码入仓；此处只留私产（战略罗盘、过程流水、研究工具、语料）。
 docs/COMPASS.md
 .claude/
 .agents/
-docs/adr/
-docs/agents/
 docs/superpowers/
 docs/plans/
 docs/report/
 docs/research/
-agent-core/narracat/CLAUDE.md
-agent-core/narracat/CONTEXT.md
 agent-core/narracat/CHANGELOG.md
-agent-core/narracat/docs/
 agent-core/narracat/skills/novel-style-reference/references/corpus/
+# 引擎侧的 plans/reports 与仓库根 docs/plans、docs/report 同性质（过程私产），默认不入仓。
+# 已入仓的 4 份是 2026-08-16 逐份人工脱敏审过的例外，见 check-public-boundary.test.mjs 的 TRACKED_ALLOWLIST。
+agent-core/narracat/docs/plans/
+agent-core/narracat/docs/reports/
+scripts/corpus-factory/
+agent-core/narracat/eval/
 scripts/reader-sim/
+poc/

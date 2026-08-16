@@ -73,7 +73,7 @@ describe('resolveDmgPath', () => {
 })
 
 describe('notarizeDmg：组装逻辑（stub exec，不实际调用系统命令/消耗公证配额）', () => {
-  const SIGNING_IDENTITY_OUTPUT = '1) 8E79D382E8B7CD596470E5B5303131DC64F803BA "Developer ID Application: Yannik Zhang (AHRB2HD27M)"\n   1 valid identities found'
+  const SIGNING_IDENTITY_OUTPUT = '1) A1B2C3D4E5F60718293A4B5C6D7E8F9012345678 "Developer ID Application: Example Developer (TEAM123456)"\n   1 valid identities found'
   const CREDS = { APPLE_API_KEY: '/k.p8', APPLE_API_KEY_ID: 'K1', APPLE_API_ISSUER: 'I1' }
 
   test('已装订则跳过（幂等），不触碰签名身份/凭证/notarytool', () => {
@@ -143,7 +143,7 @@ describe('notarizeDmg：组装逻辑（stub exec，不实际调用系统命令/�
     expect(codesignCall).toEqual([
       'codesign',
       '--sign',
-      '8E79D382E8B7CD596470E5B5303131DC64F803BA',
+      'A1B2C3D4E5F60718293A4B5C6D7E8F9012345678',
       '--force',
       '--timestamp',
       '/tmp/NarraCat.dmg',
@@ -190,10 +190,10 @@ describe('notarizeDmg：组装逻辑（stub exec，不实际调用系统命令/�
 
     const warning = logs.find((line) => line.includes('⚠') && line.includes('2 个'))
     expect(warning).toBeDefined()
-    expect(logs.some((line) => line.includes('8E79D382E8B7CD596470E5B5303131DC64F803BA'))).toBe(true)
+    expect(logs.some((line) => line.includes('A1B2C3D4E5F60718293A4B5C6D7E8F9012345678'))).toBe(true)
     expect(logs.some((line) => line.includes('D4E5F6D4E5F6D4E5F6D4E5F6D4E5F6D4E5F6D4E5'))).toBe(true)
     // 明确打印选中的是第一张（哈希用于 codesign --sign）
-    expect(logs.some((line) => line.includes('✓ 签名身份：') && line.includes('8E79D382E8B7CD596470E5B5303131DC64F803BA'))).toBe(
+    expect(logs.some((line) => line.includes('✓ 签名身份：') && line.includes('A1B2C3D4E5F60718293A4B5C6D7E8F9012345678'))).toBe(
       true,
     )
   })

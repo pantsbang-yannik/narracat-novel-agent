@@ -20,7 +20,7 @@ Format=app bundle with Mach-O thin (arm64)
 CodeDirectory v=20500 size=448 flags=0x10000(runtime) hashes=3+7 location=embedded
 Executable Segment flags=0x1
 Signature size=8975
-Authority=Developer ID Application: Yannik Zhang (AHRB2HD27M)
+Authority=Developer ID Application: Example Developer (TEAM123456)
 Authority=Developer ID Certification Authority
 Authority=Apple Root CA
 Sealed Resources version=2 rules=13 files=0
@@ -33,7 +33,7 @@ Format=app bundle with Mach-O thin (arm64)
 CodeDirectory v=20500 size=448 flags=0x0(none) hashes=3+7 location=embedded
 Executable Segment flags=0x1
 Signature size=8975
-Authority=Developer ID Application: Yannik Someone (TEAM123456)
+Authority=Developer ID Application: Example Developer (TEAM123456)
 Authority=Developer ID Certification Authority
 Authority=Apple Root CA
 Sealed Resources version=2 rules=13 files=0
@@ -53,19 +53,19 @@ Identifier=app.narracat.desktop
 Format=app bundle with Mach-O thin (arm64)
 CodeDirectory v=20500 size=448 flags=0x0(none) hashes=3+7 location=embedded
 Executable Segment flags=0x10000(runtime)
-Authority=Developer ID Application: Yannik Someone (TEAM123456)
+Authority=Developer ID Application: Example Developer (TEAM123456)
 `
 
 // spctl -a -vvv -t install <未公证产物>（本机 dist/mac-arm64/NarraCat.app 实测，2026-08-10）
 const SPCTL_UNNOTARIZED = `dist/mac-arm64/NarraCat.app: rejected
 source=Unnotarized Developer ID
-origin=Developer ID Application: Yannik Zhang (AHRB2HD27M)
+origin=Developer ID Application: Example Developer (TEAM123456)
 `
 
 // spctl -a -vvv -t exec <app>（已公证+已装订产物实测，2026-08-10，逐字拷贝）
 const SPCTL_ACCEPTED_NOTARIZED = `/tmp/gk-test/NarraCat.app: accepted
 source=Notarized Developer ID
-origin=Developer ID Application: Yannik Zhang (AHRB2HD27M)
+origin=Developer ID Application: Example Developer (TEAM123456)
 `
 
 // 手编：因其他原因被拒（非 Unnotarized），用于验证 rejected 时 accepted/notarized 都应为 false。
@@ -86,7 +86,7 @@ NarraCat-0.1.1868-mac-arm64.dmg does not have a ticket stapled to it.
 describe('parseCodesignOutput', () => {
   test('真实已签名产物：从 CodeDirectory 行解出 hasRuntimeFlag=true，且 Authority 正确（回归：flags= 不在行首）', () => {
     expect(parseCodesignOutput(CODESIGN_DV_OK)).toEqual({
-      authority: 'Developer ID Application: Yannik Zhang (AHRB2HD27M)',
+      authority: 'Developer ID Application: Example Developer (TEAM123456)',
       hasRuntimeFlag: true,
     })
   })
@@ -97,14 +97,14 @@ describe('parseCodesignOutput', () => {
 
   test('CodeDirectory 行的 flags 不含 runtime 时 hasRuntimeFlag 为 false（证明判定不是恒真）', () => {
     expect(parseCodesignOutput(CODESIGN_DV_NO_RUNTIME)).toEqual({
-      authority: 'Developer ID Application: Yannik Someone (TEAM123456)',
+      authority: 'Developer ID Application: Example Developer (TEAM123456)',
       hasRuntimeFlag: false,
     })
   })
 
   test('不会被 CodeDirectory 之外的行诱导误判（Executable Segment 等行即便带 runtime 字样也不算数）', () => {
     expect(parseCodesignOutput(CODESIGN_DV_TRAP_NON_CODEDIRECTORY_RUNTIME)).toEqual({
-      authority: 'Developer ID Application: Yannik Someone (TEAM123456)',
+      authority: 'Developer ID Application: Example Developer (TEAM123456)',
       hasRuntimeFlag: false,
     })
   })
@@ -150,7 +150,7 @@ describe('verifySignedArtifact 组装逻辑（注入 stub exec，不依赖本机
 
     const result = verifySignedArtifact({ appPath: '/tmp/NarraCat.app', notarized: false, exec })
     expect(result).toEqual({
-      authority: 'Developer ID Application: Yannik Zhang (AHRB2HD27M)',
+      authority: 'Developer ID Application: Example Developer (TEAM123456)',
       hasRuntimeFlag: true,
       notarized: false,
     })
@@ -244,7 +244,7 @@ describe('verifySignedArtifact：dmg 容器校验（electron-builder 不公证 d
     const exec = stubExecWithDmg({ dmgSpctlStderr: SPCTL_ACCEPTED_NOTARIZED, dmgStaplerStderr: STAPLER_VALIDATE_STAPLED })
     const result = verifySignedArtifact({ appPath: DEFAULT_APP_PATH, dmgPath: '/tmp/NarraCat.dmg', notarized: true, exec })
     expect(result).toEqual({
-      authority: 'Developer ID Application: Yannik Zhang (AHRB2HD27M)',
+      authority: 'Developer ID Application: Example Developer (TEAM123456)',
       hasRuntimeFlag: true,
       notarized: true,
       dmgPath: '/tmp/NarraCat.dmg',

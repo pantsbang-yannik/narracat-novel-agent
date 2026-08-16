@@ -30,7 +30,7 @@ export const PRUNED_MCP_NODE_MODULE_DIR_NAMES = new Set([
 // - 引擎诊断：narracat.manifest.json（自有契约 SSOT，App 发现探针）
 //   + agents / commands / skills / schemas / templates
 // - 运行时 prompt `${CLAUDE_PLUGIN_ROOT}/` 引用：docs/contracts、templates、skills/*/references
-//   （真人范例语料已迁往官方只读语料服务 narracat-corpus-service，不再随包分发，2026-08-05）
+//   （真人范例语料已迁往官方只读语料服务（私有仓），不再随包分发，2026-08-05）
 //   （引擎 hooks/ 已随 claude-sdk 退役整目录删除：钩子判据 TS 化住在 App 侧 electron/main/engine/，
 //   经 pi 扩展挂载，不再有随包分发的 shell 钩子）
 // - NovelMemory MCP 运行：mcp-server/dist + mcp-server/node_modules（生产依赖，prepare 已 prune）

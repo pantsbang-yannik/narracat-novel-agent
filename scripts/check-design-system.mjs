@@ -3,6 +3,7 @@ import { join, relative } from 'node:path'
 
 const requiredFiles = {
   'docs/design.md': readFileSync('docs/design.md', 'utf8'),
+  'docs/agents/workflow.md': readFileSync('docs/agents/workflow.md', 'utf8'),
   'src/styles/globals.css': readFileSync('src/styles/globals.css', 'utf8'),
   'src/design-system/surfaces.ts': readFileSync('src/design-system/surfaces.ts', 'utf8'),
   'src/design-system/typography.ts': readFileSync('src/design-system/typography.ts', 'utf8'),
@@ -60,6 +61,8 @@ const requiredContracts = [
   ['docs/design.md', '文本框选色'],
   ['docs/design.md', '拖动过程中只更新 grid style'],
   ['docs/design.md', '透明轨道、`10px` 视觉占位'],
+  ['docs/agents/workflow.md', '品牌资产'],
+  ['docs/agents/workflow.md', 'src/components/brand/README.md'],
   ['src/styles/globals.css', '--color-workspace'],
   ['src/styles/globals.css', '--color-hover'],
   ['src/styles/globals.css', '--color-active'],

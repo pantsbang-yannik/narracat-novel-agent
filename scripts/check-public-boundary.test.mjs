@@ -10,38 +10,60 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const license = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')).license
 const isPublicRepo = license === 'AGPL-3.0-only'
 
+// 2026-08-16：本仓升格为唯一开发仓，工程契约文档（项目地图 / ADR / 工作流纪律）随代码公开，
+// 故从本表移除。留在表里的是私产：研究工具、内部战略与过程流水（COMPASS / report / plans / research）。
+// 引擎侧 docs/ 整体放行，但其中同性质的 plans/ 与 reports/ 单独禁回来——与仓库根的
+// docs/plans/ docs/report/ 对称，别让引擎侧成为绕过口。
 const FORBIDDEN_TRACKED_PREFIXES = [
   'agent-core/narracat/skills/novel-style-reference/references/corpus/',
-  'agent-core/narracat/eval/', 'agent-core/narracat/docs/',
-  'agent-core/narracat/CLAUDE.md', 'agent-core/narracat/CONTEXT.md', 'agent-core/narracat/CHANGELOG.md',
-  'CLAUDE.md', 'AGENTS.md', 'CONTEXT.md', 'docs/COMPASS.md',
+  'agent-core/narracat/eval/', 'agent-core/narracat/CHANGELOG.md',
+  'docs/COMPASS.md',
   '.claude/', '.agents/', '.superpowers/', 'poc/',
-  'docs/adr/', 'docs/agents/', 'docs/superpowers/', 'docs/plans/', 'docs/report/', 'docs/research/',
+  'docs/superpowers/', 'docs/plans/', 'docs/report/', 'docs/research/',
   'scripts/corpus-factory/',
   'scripts/reader-sim/',
+  'agent-core/narracat/docs/plans/', 'agent-core/narracat/docs/reports/',
 ]
-// 运行时契约随包分发，非研发痕迹；与 export-public-repo.mjs 的 PUBLIC_EXEMPT 保持一致（2026-08-05 用户拍板豁免）。
-// 只收窄这一个子路径，守卫其余面（agent-core/narracat/docs/ 下 contracts/ 以外的一切）保持不变。
-const FORBIDDEN_EXEMPT_PREFIXES = ['agent-core/narracat/docs/contracts/']
-// 允许 pantsbang-yannik；禁其余个人标识
-const FORBIDDEN_CONTENT = ['/Users/yannik', 'yangnik528', 'yannikzhang528', '张子扬']
+// 上面两个引擎侧前缀是 2026-08-16 补的（此前完全无守卫）。补的时候这 4 份已通过逐文件
+// 人工脱敏扫描、判定可公开并入库，故按文件粒度放行；目的是「今后新增的一律拦下」，
+// 而不是回头把已审文件挖掉。新增文件要进这两个目录，得先过同一道人工扫描再显式加进来。
+const TRACKED_ALLOWLIST = new Set([
+  'agent-core/narracat/docs/plans/2026-06-12-agent-core-4.0-rebuild-design.md',
+  'agent-core/narracat/docs/plans/2026-06-13-legacy-capability-backlog.md',
+  'agent-core/narracat/docs/reports/2026-03-28-system-audit-anti-template.md',
+  'agent-core/narracat/docs/reports/2026-04-26-system-debt-analysis.md',
+])
+// 允许 pantsbang-yannik；禁其余个人标识与私有基础设施标识。
+// Yannik Zhang / AHRB2HD27M（Apple Team ID）是 2026-08-16 人工扫描才发现的正则盲区，补入防复发。
+// the-lumos-labs / narracat-corpus-service：私有组织名与私有仓名，两道守卫原本都不拦，同日补入。
+// corpus.narracat.com 有意不收：那是客户端真实调用的线上端点，反编译即得，藏不住也不必藏。
+const FORBIDDEN_CONTENT = [
+  '/Users/yannik', 'yangnik528', 'yannikzhang528', '张子扬', 'Yannik Zhang', 'AHRB2HD27M',
+  'the-lumos-labs', 'narracat-corpus-service',
+]
+// 内容扫描的文件级豁免：值本身是被代码消费的事实记录，改值会让记录失真。
+// narracat-agent-core.lock.json 的 upstream.repo 由 audit-narracat-prompts.mjs 的
+// formatPromptDriftReport 读出并打印（`${report.upstream.repo}@${commit}`），是 2026-06-02
+// 那次 accepted upstream import 的溯源凭证，不是可随手改写的文案。
+const CONTENT_EXEMPT_FILES = new Set(['agent-core/narracat-agent-core.lock.json'])
 
 const tracked = () => execFileSync('git', ['-C', repoRoot, 'ls-files'], { encoding: 'utf8' }).split('\n').filter(Boolean)
 
 test(isPublicRepo ? '私有资产路径不被 git 追踪' : '(skip)', () => {
   if (!isPublicRepo) return
   const bad = tracked().filter((f) =>
-    FORBIDDEN_TRACKED_PREFIXES.some((p) => (p.endsWith('/') ? f.startsWith(p) : f === p)) &&
-    !FORBIDDEN_EXEMPT_PREFIXES.some((p) => f.startsWith(p)))
+    !TRACKED_ALLOWLIST.has(f) &&
+    FORBIDDEN_TRACKED_PREFIXES.some((p) => (p.endsWith('/') ? f.startsWith(p) : f === p)))
   expect(bad).toEqual([])
 })
 
-test(isPublicRepo ? '追踪文件内容不含个人标识' : '(skip)', () => {
+test(isPublicRepo ? '追踪文件内容不含个人标识与私有基础设施标识' : '(skip)', () => {
   if (!isPublicRepo) return
   const hits = []
   for (const f of tracked()) {
     // 跳过守卫自身（包含禁用串作为数据常量，导致自指）
     if (f === 'scripts/check-public-boundary.test.mjs') continue
+    if (CONTENT_EXEMPT_FILES.has(f)) continue
     let text
     try { text = readFileSync(join(repoRoot, f), 'utf8') } catch { continue }
     for (const needle of FORBIDDEN_CONTENT) if (text.includes(needle)) hits.push(`${f}: ${needle}`)

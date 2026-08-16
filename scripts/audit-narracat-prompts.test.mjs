@@ -6,7 +6,7 @@ import { auditNarraCatPromptDrift, formatPromptDriftReport } from './audit-narra
 
 const lock = {
   upstream: {
-    repo: 'the-lumos-labs/NarraCat',
+    repo: 'upstream-org/NarraCat',
     commit: '7288b30ce6dc9e41d5efc0c81bb763cb945e3b22',
     manifestVersion: '3.10.22',
   },

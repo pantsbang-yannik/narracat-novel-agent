@@ -3,7 +3,7 @@
  * corpus-deid-lint — 真人范例检索库「去标识化」回归护栏
  *
  * 语料本体（extracts / index.json / query-index.md）已迁往官方只读语料服务
- * narracat-corpus-service（2026-08-05），不再随本仓分发，故其去标识化校验一并迁走。
+ * 语料服务私有仓（2026-08-05），不再随本仓分发，故其去标识化校验一并迁走。
  * 本脚本收窄为守两处仍随包分发的内容，防原书名/作者再渗入。error 级（退出码 1）：
  *   - 能力 packs（novel-web-craft / novel-structure）evidence 残留来源署名
  *   - novel-style-reference skill 文档（SKILL.md / references 下，corpus/ 除外）渗入
@@ -62,7 +62,7 @@ export function lintCorpusDeid(root) {
 
   // novel-style-reference skill 文档（SKILL.md + references/）不得渗入原始语料路径 /
   // 本地库目录名 / 来源署名——profiles 研究产物泄漏即由此堵住。语料本体已迁
-  // narracat-corpus-service，本脚本只守随包 packs 与 skill 文档；skipDirName 仍传
+  // 语料服务私有仓，本脚本只守随包 packs 与 skill 文档；skipDirName 仍传
   // 'corpus' 无害（本仓已无该目录，纯防御——万一本地残留不误扫）。
   const SKILL_ROOT = path.join(root, 'skills/novel-style-reference')
   if (existsSync(SKILL_ROOT)) {

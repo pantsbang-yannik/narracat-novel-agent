@@ -27,7 +27,7 @@ describe('NarraCat Agent Core 打包白名单', () => {
       'schemas/ReviewReport.json',
       'templates/premise-template.md',
       'skills/novel-web-craft/SKILL.md',
-      // 真人范例语料已迁往官方只读语料服务 narracat-corpus-service，不再随包分发（2026-08-05）
+      // 真人范例语料已迁往官方只读语料服务（私有仓），不再随包分发（2026-08-05）
       'skills/novel-style-reference/SKILL.md',
       'docs/contracts/world-guided.md',
       'mcp-server/package.json',

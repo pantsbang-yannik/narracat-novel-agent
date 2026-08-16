@@ -34,8 +34,8 @@ describe('Developer ID 签名身份闸', () => {
 describe('parseSigningIdentityHash', () => {
   test('从真实身份行（40 位十六进制 SHA-1）解出哈希——实测 security find-identity 输出', () => {
     expect(
-      parseSigningIdentityHash('1) 8E79D382E8B7CD596470E5B5303131DC64F803BA "Developer ID Application: Yannik Zhang (AHRB2HD27M)"'),
-    ).toBe('8E79D382E8B7CD596470E5B5303131DC64F803BA')
+      parseSigningIdentityHash('1) A1B2C3D4E5F60718293A4B5C6D7E8F9012345678 "Developer ID Application: Example Developer (TEAM123456)"'),
+    ).toBe('A1B2C3D4E5F60718293A4B5C6D7E8F9012345678')
   })
 
   test('序号为两位数时同样能解出（不依赖固定列宽）', () => {

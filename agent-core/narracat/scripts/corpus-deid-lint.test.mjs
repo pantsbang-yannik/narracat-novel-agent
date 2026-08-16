@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { detectSourceSignatures, lintCorpusDeid } from './corpus-deid-lint.mjs'
 
-// 语料本体（extracts/index.json/query-index.md）已迁往 narracat-corpus-service，
+// 语料本体（extracts/index.json/query-index.md）已迁往语料服务私有仓，
 // 下列 fixture 不再需要构造它们——lintCorpusDeid 现在只扫 packs evidence 与 skill 文档。
 
 test('detectSourceSignatures 抓原始语料文件路径(.txt)', () => {
