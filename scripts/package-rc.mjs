@@ -110,10 +110,20 @@ function dmgArtifactPath(clientVersion) {
   return join(repoRoot, 'dist', `NarraCat-${clientVersion}-mac-arm64.dmg`)
 }
 
-/** 本次打包产出的未压缩 .app 可执行文件，路径约定与 audit-packaged-app-boundary.mjs 的
- * `dist/mac-arm64/NarraCat.app` 一致（本仓只打 arm64）。 */
-function packagedAppBinaryPath() {
-  return join(repoRoot, 'dist', 'mac-arm64', 'NarraCat.app', 'Contents', 'MacOS', 'NarraCat')
+/** 本次打包产出的未压缩 .app 可执行文件。
+ *
+ * 刻意就地定义、不 import verify-signed-artifact 的 DEFAULT_APP_PATH：本文件被 CLI 入口测试
+ * 复制到临时目录单独 spawn（见 package-rc.test.mjs 的 buildCliFixture），每多一个跨文件 import
+ * 就要多复制一个文件，而 verify-signed-artifact 自己还链着 notarize-dmg——耦合成本高于收益。
+ * 两者一致性改由测试钉住（package-rc.test.mjs「产物路径与 verify 侧同源」），漂移会红。 */
+export function packagedAppBinaryPath(root = repoRoot) {
+  return join(root, 'dist', 'mac-arm64', 'NarraCat.app', 'Contents', 'MacOS', 'NarraCat')
+}
+
+/** step.env 是**叠加**层不是替换层：子进程仍需完整继承 process.env（PATH、公证/语料凭证等）。
+ * 抽成纯函数是为了能被测试直接钉住——runPackageRc 会真的 execFileSync，测不到这一层。 */
+export function resolveStepEnv(step, baseEnv = process.env) {
+  return step.env ? { ...baseEnv, ...step.env } : undefined
 }
 
 export function createPackageRcSteps({
@@ -205,7 +215,12 @@ export function createPackageRcSteps({
       label: 'smoke packaged app',
       command: process.execPath,
       args: [join(repoRoot, 'scripts', 'smoke-memory.mjs')],
-      env: { NARRACAT_SMOKE_ELECTRON_BIN: packagedAppBinaryPath() },
+      env: {
+        NARRACAT_SMOKE_ELECTRON_BIN: packagedAppBinaryPath(),
+        // 硬闸：这一步只要没真正跑到产物就必须失败。缺了它，env 万一没传到子进程，
+        // smoke 会静默回落 dev 态、且输出与真产物逐字相同——正是本 PR 要修的那类假绿。
+        NARRACAT_SMOKE_REQUIRE_PACKAGED: '1',
+      },
     },
     ...(notarize
       ? [
@@ -238,12 +253,8 @@ export function runPackageRc({ cwd = repoRoot, stdio = 'inherit', notarize = fal
   }
   const clientVersion = resolveClientBuildVersion({ root: cwd })
   for (const step of createPackageRcSteps({ clientVersion, notarize })) {
-    // step.env 是叠加层不是替换层：子进程仍需完整继承 process.env（PATH、公证/语料凭证等）。
-    execFileSync(step.command, step.args, {
-      cwd,
-      stdio,
-      ...(step.env ? { env: { ...process.env, ...step.env } } : {}),
-    })
+    const env = resolveStepEnv(step)
+    execFileSync(step.command, step.args, { cwd, stdio, ...(env ? { env } : {}) })
   }
 }
 

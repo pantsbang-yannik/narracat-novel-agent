@@ -26,7 +26,7 @@ bun --no-cache run build
 bun --no-cache run package
 ```
 
-`bun --no-cache run package` computes the client build version from the current release commit, verifies and prepares NarraCat Agent Core, prepares the bundled headless Agent runtime, builds Electron bundles, and packages the macOS arm64 DMG.
+`bun --no-cache run package` computes the client build version from the current release commit, verifies and prepares NarraCat Agent Core, probes the staged runtime, builds Electron bundles, packages the macOS arm64 DMG, and smokes the packaged app.
 
 Do not use an upstream NarraCat checkout during RC packaging. RC packaging uses the internal `agent-core/narracat` source and packages it as `NarraCatAgentCore`.
 

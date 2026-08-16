@@ -34,8 +34,8 @@ function assertExists(path, label) {
   if (!existsSync(path)) throw new Error(`${label} 不存在：${path}`)
 }
 
-export function runStagedEmbeddingSelfTest({ root = repoRoot } = {}) {
-  const { nodePath, selftestPath, modelPath } = createStagedAgentCoreRuntimeProbePlan({ root })
+export function runStagedEmbeddingSelfTest({ root = repoRoot, nodePath: nodeOverride } = {}) {
+  const { nodePath, selftestPath, modelPath } = createStagedAgentCoreRuntimeProbePlan({ root, nodePath: nodeOverride })
   assertExists(selftestPath, 'Staged embedding selftest')
   assertExists(modelPath, 'Embedding model directory')
 
@@ -66,8 +66,8 @@ export function runStagedEmbeddingSelfTest({ root = repoRoot } = {}) {
   return report
 }
 
-export async function runStagedMcpStartupProbe({ root = repoRoot, timeoutMs = 10_000 } = {}) {
-  const { nodePath, mcpServerPath, modelPath } = createStagedAgentCoreRuntimeProbePlan({ root })
+export async function runStagedMcpStartupProbe({ root = repoRoot, timeoutMs = 10_000, nodePath: nodeOverride } = {}) {
+  const { nodePath, mcpServerPath, modelPath } = createStagedAgentCoreRuntimeProbePlan({ root, nodePath: nodeOverride })
   assertExists(mcpServerPath, 'Staged NovelMemory MCP server')
   assertExists(modelPath, 'Embedding model directory')
 
@@ -141,14 +141,24 @@ export async function runStagedMcpStartupProbe({ root = repoRoot, timeoutMs = 10
   }
 }
 
-export async function runStagedAgentCoreRuntimeProbe({ root = repoRoot } = {}) {
-  const selftestReport = runStagedEmbeddingSelfTest({ root })
-  await runStagedMcpStartupProbe({ root })
+export async function runStagedAgentCoreRuntimeProbe({ root = repoRoot, nodePath } = {}) {
+  const selftestReport = runStagedEmbeddingSelfTest({ root, nodePath })
+  await runStagedMcpStartupProbe({ root, nodePath })
   console.log('Staged Agent Core runtime probe OK')
   return selftestReport
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  // 必须用 Node 跑：暂存树里的 better-sqlite3 是 node-ABI 原生模块，bun 尚不支持加载它，
+  // 用 bun 跑会得到 sqliteVec.ok=false 的假红——那是运行时不对，不是暂存树坏了。
+  // 本仓命令惯例是 bun，这条闸防的就是有人（或 CI）顺手写成 `bun scripts/...`。
+  if (process.versions.bun) {
+    console.error(
+      '探针必须用 Node 运行（bun 不支持加载 node-ABI 的 better-sqlite3，会误报 sqliteVec 失败）：\n' +
+        '  node scripts/probe-staged-agent-core-runtime.mjs',
+    )
+    process.exit(1)
+  }
   try {
     await runStagedAgentCoreRuntimeProbe()
   } catch (error) {
