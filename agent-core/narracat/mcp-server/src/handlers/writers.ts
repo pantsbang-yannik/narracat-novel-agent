@@ -1895,11 +1895,14 @@ export async function novelSubmitOutline(
   args: Record<string, unknown>,
   ctx: ToolContext,
 ): Promise<unknown> {
-  const phase = args["phase"];
+  // phase 恒为 1、没有第二个取值，不值得让模型每次记着传（漏传只会白撞一轮入参校验）：
+  // 缺省即 1。显式传了别的值仍 fail-loud——那是「误把章级细纲提交到书级入口」的真实误用，
+  // 这条 hint 有价值，不能连它一起砍掉。
+  const phase = args["phase"] ?? 1;
   if (phase !== 1) {
     return singleError(
       "phase",
-      "integer 1",
+      "integer 1（可省略，缺省即 1）",
       `${typeof phase}: ${JSON.stringify(phase)}`,
       "书级+卷级大纲提交 phase 固定为 1；章级细纲改用 novel_submit_chapter_outline",
     );

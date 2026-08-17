@@ -239,6 +239,36 @@ describe("novel_submit_outline", () => {
     expect(result.ok).toBe(false);
   });
 
+  // phase 恒为 1、无第二个取值，故不强制模型传：漏传不该白撞一轮入参校验。
+  // 显式传错值的拒绝路径由上一条锁住，两条一起才是完整语义。
+  it("省略 phase 与显式传 1 等价（缺省即 1）", async () => {
+    const { ctx, root } = createProject();
+    const result = (await novelSubmitOutline(
+      { payload: loadFixture("outline-v5-valid-book.json") },
+      ctx,
+    )) as Record<string, unknown>;
+
+    expect(result.ok).toBe(true);
+    expect(result.volumes).toBe(1);
+    expect(result.arcs).toBe(2);
+    expect(existsSync(join(root, "outline", "master-outline.md"))).toBe(true);
+  });
+
+  it("省略 phase 时 scope 分支照常生效（不因缺省而回落 full）", async () => {
+    const { ctx } = createProject();
+    const base = loadFixture<Record<string, unknown>>("outline-v5-valid-book.json");
+    const { volumes: _volumes, ...book } = base;
+    const result = (await novelSubmitOutline({ scope: "book", payload: book }, ctx)) as Record<
+      string,
+      unknown
+    >;
+
+    expect(result.ok).toBe(true);
+    // scope=book 只落书级骨架、卷结构待展开，故卷数为 0——若 phase 缺省把整条分支带偏回落
+    // full，这里会拿到 fixture 的 1 卷。
+    expect(result.volumes).toBe(0);
+  });
+
   it("伏笔延迟兑现告警随回执返回、不阻断入库（ok 仍 true）", async () => {
     const { ctx } = createProject();
     const payload = loadFixture<Record<string, any>>("outline-v5-valid-book.json");

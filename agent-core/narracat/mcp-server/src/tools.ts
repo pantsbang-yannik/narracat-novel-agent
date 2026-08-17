@@ -605,7 +605,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        phase: { type: "integer", enum: [1], description: "固定为 1" },
+        phase: { type: "integer", enum: [1], description: "可省略；本工具只受理书级+卷级，章级细纲改用 novel_submit_chapter_outline" },
         scope: {
           type: "string",
           enum: ["full", "book", "volumes"],
@@ -618,7 +618,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
             "OutlineStructure 顶层对象（字段定义见 schemas/outline-structure.json）：central_dramatic_question / protagonist_core_desire / protagonist_core_lack / antagonistic_force / stakes_progression / storylines / foreshadowing_registry / volumes（scope=book 时省略；scope=volumes 时只需 volumes）",
         },
       },
-      required: ["phase", "payload"],
+      required: ["payload"],
     },
   },
   {
