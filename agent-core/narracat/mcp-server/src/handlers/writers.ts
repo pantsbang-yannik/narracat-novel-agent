@@ -1898,7 +1898,11 @@ export async function novelSubmitOutline(
   // phase 恒为 1、没有第二个取值，不值得让模型每次记着传（漏传只会白撞一轮入参校验）：
   // 缺省即 1。显式传了别的值仍 fail-loud——那是「误把章级细纲提交到书级入口」的真实误用，
   // 这条 hint 有价值，不能连它一起砍掉。
-  const phase = args["phase"] ?? 1;
+  //
+  // 判「省略」只认 undefined，不能用 `?? 1`：`null ?? 1` 也是 1，会把显式传入的 null 当成
+  // 省略静默放行，而 null 属于「显式传了但不等于 1」，必须走 fail-loud。runTool
+  // （core.ts）拿到 args 直接调 handler、不跑 tool inputSchema 校验，这里是唯一防线。
+  const phase = "phase" in args && args["phase"] !== undefined ? args["phase"] : 1;
   if (phase !== 1) {
     return singleError(
       "phase",

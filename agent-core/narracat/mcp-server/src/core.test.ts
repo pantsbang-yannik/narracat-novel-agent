@@ -28,6 +28,16 @@ describe("core 入口", () => {
     expect(handlerNames).toEqual(defNames);
   });
 
+  // 公开 schema 的锁：handler 侧「省略即 1」只有在 phase 不是 required 时才对模型可见。
+  // 只测 handler 会漏掉「有人把 phase 加回 required」——那时 handler 依旧全绿，模型却又被
+  // 要求每次传它，改动等于白做。
+  it("novel_submit_outline 的 phase 不在 required 中（payload 仍必填）", () => {
+    const def = TOOL_DEFINITIONS.find((d) => d.name === "novel_submit_outline");
+    expect(def).toBeDefined();
+    const required = (def!.inputSchema as { required?: string[] }).required ?? [];
+    expect(required).toEqual(["payload"]);
+  });
+
   it("runTool 未知工具返回 ERR_TOOL_001 信封且不触发 getContext", async () => {
     const getContext = vi.fn();
     const result = await runTool("novel_nonexistent", {}, getContext, () => {});

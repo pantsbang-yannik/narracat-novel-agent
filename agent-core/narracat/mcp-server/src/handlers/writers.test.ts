@@ -239,6 +239,19 @@ describe("novel_submit_outline", () => {
     expect(result.ok).toBe(false);
   });
 
+  // 显式 null 属于「传了但不等于 1」，不是省略——`?? 1` 会把它静默当成 1 放行。
+  // runTool 直接调 handler、不跑 tool inputSchema 校验，这里是唯一防线。
+  it("phase 显式为 null 时拒绝（不当成省略）", async () => {
+    const { ctx } = createProject();
+    const result = (await novelSubmitOutline({ phase: null, payload: {} }, ctx)) as Record<
+      string,
+      unknown
+    >;
+    expect(result.ok).toBe(false);
+    const fields = (result.errors as Array<{ field: string }>).map((e) => e.field);
+    expect(fields).toContain("phase");
+  });
+
   // phase 恒为 1、无第二个取值，故不强制模型传：漏传不该白撞一轮入参校验。
   // 显式传错值的拒绝路径由上一条锁住，两条一起才是完整语义。
   it("省略 phase 与显式传 1 等价（缺省即 1）", async () => {
