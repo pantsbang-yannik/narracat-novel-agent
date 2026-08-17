@@ -42,8 +42,16 @@
  *   若覆盖前已判空（形如 `if (block.partialJson) block.arguments = ...`），本扩展即可摘除。
  * - 怎么复测：`pi-eager-toolcall-args.test.ts` 覆盖三种事件序列（eager 无 delta / 标准增量 /
  *   截断）。摘除时整份删掉即可，不与其他模块耦合；装配处见 `index.ts` 的 extensions 数组。
- * - 注意本扩展**不**处理截断场景（见测试第三例）：截断时 pi 会静默交出半个对象，那是另一条
- *   路径（缺字段而非全空），救它需要的是「参数不完整」信号，上游目前没有，不在本扩展范围内。
+ * ## 恢复边界（两个条件同时成立才动手）
+ *
+ * 1. 该工具调用**从未收到过** `input_json_delta`（即没有 `toolcall_delta` 事件）；
+ * 2. 最终参数为空。
+ *
+ * 只看条件 2 是不够的：服务端先给 eager input、再发一条把参数撤空的增量时，最终的空对象是模型
+ * 自己算出来的真实意图，恢复旧值等于执行一个模型已经放弃的调用。条件 1 把这种情况挡在外面。
+ *
+ * 同理，本扩展**不**处理截断场景（见测试第三例）：截断必然来过增量，条件 1 直接不成立。截断时
+ * pi 会静默交出半个对象（缺字段而非全空），救它需要的是「参数不完整」信号，上游目前没有。
  */
 import { createSyntheticSourceInfo } from '@mariozechner/pi-coding-agent'
 import type { Extension } from '@mariozechner/pi-coding-agent'
@@ -87,10 +95,24 @@ type EagerSnapshot = { args: UnknownRecord; toolCallId: string | undefined }
 export function createPiEagerToolArgsRestorer(): Extension {
   /** run 级、按 assistant 消息滚动清空：每条 message_end 收尾即清，不跨消息累积。 */
   let snapshots = new Map<number, EagerSnapshot>()
+  /**
+   * 出现过增量的 contentIndex。恢复的前提是「服务端**没有**发过 input_json_delta」——只要来过
+   * 一条增量，最终参数就是模型自己算出来的结果，哪怕它是空对象也得原样交出去（模型可能在增量里
+   * 把参数撤空，那是真实意图，不是传输丢失）。只看「最终为空」不看「有没有来过增量」，会把这种
+   * 撤销当成丢失、把模型已经放弃的参数硬塞回去执行。
+   */
+  let sawDelta = new Set<number>()
 
   function onMessageUpdate(event: PiMessageUpdateEvent): void {
     const streamEvent = event.assistantMessageEvent
-    if (!isRecord(streamEvent) || streamEvent.type !== 'toolcall_start') return
+    if (!isRecord(streamEvent)) return
+
+    if (streamEvent.type === 'toolcall_delta') {
+      if (typeof streamEvent.contentIndex === 'number') sawDelta.add(streamEvent.contentIndex)
+      return
+    }
+
+    if (streamEvent.type !== 'toolcall_start') return
     const contentIndex = streamEvent.contentIndex
     if (typeof contentIndex !== 'number') return
 
@@ -111,8 +133,10 @@ export function createPiEagerToolArgsRestorer(): Extension {
 
   function onMessageEnd(event: PiMessageEndEvent): PiMessageEndEventResult | undefined {
     const captured = snapshots
+    const deltaSeen = sawDelta
     // 无论本条消息救没救到，收尾都要清空——快照只对产生它的那条 assistant 消息有效。
     snapshots = new Map()
+    sawDelta = new Set()
 
     if (captured.size === 0) return undefined
     const message = event.message
@@ -122,6 +146,8 @@ export function createPiEagerToolArgsRestorer(): Extension {
     const content = message.content.map((block, index) => {
       if (!isRecord(block) || block.type !== 'toolCall') return block
       if (!isEmptyArguments(block.arguments)) return block
+      // 来过增量 = 最终参数是模型自己算出来的，空也是它的意思，不许覆盖。
+      if (deltaSeen.has(index)) return block
       const snapshot = captured.get(index)
       if (!snapshot) return block
       // id 两端都在却对不上 = 索引语义与预期不符（上游改了 content 组装顺序之类），

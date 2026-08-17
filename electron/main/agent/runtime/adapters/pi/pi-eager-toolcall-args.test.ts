@@ -69,6 +69,20 @@ const STANDARD_DELTA = messageEnvelope([
   { type: 'content_block_stop', index: 0 },
 ])
 
+/**
+ * eager input 之后跟一条把参数撤空的增量。最终的 `{}` 是模型自己算出来的真实意图，
+ * 不是传输丢失——恢复旧值等于执行一个模型已经放弃的调用。
+ */
+const EAGER_THEN_EMPTY_DELTA = messageEnvelope([
+  {
+    type: 'content_block_start',
+    index: 0,
+    content_block: { type: 'tool_use', id: 'toolu_1', name: TOOL_NAME, input: FULL_ARGS },
+  },
+  { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{}' } },
+  { type: 'content_block_stop', index: 0 },
+])
+
 /** 增量在 payload 的值开始之前断掉（max_tokens / 断流）。 */
 const TRUNCATED_DELTA = messageEnvelope([
   {
@@ -163,6 +177,14 @@ describe('createPiEagerToolArgsRestorer', () => {
     const { beforeExtension, afterExtension } = await runThroughExtension(STANDARD_DELTA)
     expect(toolCallArgs(beforeExtension)).toEqual(FULL_ARGS)
     expect(toolCallArgs(afterExtension)).toEqual(FULL_ARGS)
+  })
+
+  test('eager 之后来了把参数撤空的增量：那是模型的真实意图，不许恢复', async () => {
+    const { beforeExtension, afterExtension } = await runThroughExtension(EAGER_THEN_EMPTY_DELTA)
+    // 最终参数同样是 {}，但这次是模型自己撤销的，与「无 delta 被抹空」必须区别对待——
+    // 判据是「有没有来过 toolcall_delta」，不是「最终是不是空」。
+    expect(toolCallArgs(beforeExtension)).toEqual({})
+    expect(toolCallArgs(afterExtension)).toEqual({})
   })
 
   test('delta 中途截断：非本扩展职责，不介入、不误救', async () => {
