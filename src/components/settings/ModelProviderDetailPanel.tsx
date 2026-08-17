@@ -185,12 +185,16 @@ export function ModelProviderDetailPanel({
           </SettingsRow>
         ) : null}
         {provider === 'custom' && config.providers[provider].wire === 'openai' ? (
-          <SettingsRow align="start" title="费用提示" description="选 OpenAI 协议意味着什么">
-            {/* 前缀缓存提示位（文案占位，作者定稿——Issue #5 前提 1） */}
-            <p className="text-xs leading-relaxed text-muted-foreground" data-model-wire-cache-hint="true">
-              OpenAI 协议端点通常不支持 Anthropic 式前缀缓存；超长篇写作的上下文包很大，前缀缓存是成本命门——
-              无缓存时同量上下文的费用可能高出数倍。请确认你的服务商支持缓存，或按无缓存评估成本。
-            </p>
+          <SettingsRow align="start" title="OpenAI 协议须知" description="前缀缓存费用与功能覆盖范围">
+            {/* 文案为维护者定稿（#5 前提 1 + PR #13 review 功能缺口告知），改动需先与维护者对齐 */}
+            <div className="grid gap-1.5" data-model-wire-cache-hint="true">
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                OpenAI 兼容协议不支持 Anthropic 式的前缀缓存。超长篇写作每一轮都要带很大的上下文包，缓存是成本命门——同样的内容，无缓存时的花费可能是有缓存时的数倍，请按无缓存预估你的开销。
+              </p>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                另外，此协议目前只覆盖写作主链。角色聊天、能力包编译等功能仍走 Anthropic 协议，选择此项后将无法使用。
+              </p>
+            </div>
           </SettingsRow>
         ) : null}
         <SettingsRow

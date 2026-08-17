@@ -222,3 +222,57 @@ describe('ModelProviderDetailPanel（SSR 结构断言）', () => {
     expect(true).toBe(true)
   })
 })
+
+// ---------------------------------------------------------------------------
+// wire 选择器（PR #13 review 🟡：此前 UI 层零测试）
+// ---------------------------------------------------------------------------
+
+function customConfig(wire: 'anthropic' | 'openai') {
+  return baseConfig({
+    providers: {
+      ...DEFAULT_PROVIDER_SETTINGS,
+      custom: { baseUrl: 'https://gw.example.com/v1', wire },
+    },
+    modelPool: [{ provider: 'custom', modelId: 'some-model', verification: null }],
+    primaryModelKey: 'custom/some-model',
+    apiKeyMetadata: {},
+  })
+}
+
+function wireButton(html: string, option: 'anthropic' | 'openai'): string {
+  return html.match(new RegExp(`<button[^>]*data-model-wire-option="${option}"[^>]*>`))?.[0] ?? ''
+}
+
+describe('wire 选择器（SSR 结构断言）', () => {
+  test('渲染条件：custom 渠道渲染选择器，内置渠道（deepseek）不渲染', () => {
+    expect(render({ provider: 'custom', config: customConfig('anthropic') })).toContain('data-model-wire-selector')
+    // render() 默认 provider=deepseek。
+    expect(render()).not.toContain('data-model-wire-selector')
+  })
+
+  test('aria-pressed 随 wire 状态：anthropic 时对应按钮选中、openai 未选中', () => {
+    const html = render({ provider: 'custom', config: customConfig('anthropic') })
+    expect(wireButton(html, 'anthropic')).toContain('aria-pressed="true"')
+    expect(wireButton(html, 'openai')).toContain('aria-pressed="false"')
+  })
+
+  test('wire=openai：openai 按钮选中，须知提示出现（维护者定稿文案）；anthropic 时提示隐藏', () => {
+    const openaiHtml = render({ provider: 'custom', config: customConfig('openai') })
+    expect(wireButton(openaiHtml, 'openai')).toContain('aria-pressed="true"')
+    expect(openaiHtml).toContain('data-model-wire-cache-hint')
+    // 定稿文案两段都在：费用警示 + 功能覆盖告知（关键词防将来改文案把告知改丢）。
+    expect(openaiHtml).toContain('前缀缓存')
+    expect(openaiHtml).toContain('只覆盖写作主链')
+
+    const anthropicHtml = render({ provider: 'custom', config: customConfig('anthropic') })
+    expect(anthropicHtml).not.toContain('data-model-wire-cache-hint')
+  })
+
+  test('接口地址占位随 wire 切换：openai 时提示以 /v1 结尾的端点形态', () => {
+    const openaiHtml = render({ provider: 'custom', config: customConfig('openai') })
+    expect(openaiHtml).toContain('placeholder="https://api.example.com/v1"')
+
+    const anthropicHtml = render({ provider: 'custom', config: customConfig('anthropic') })
+    expect(anthropicHtml).toContain('placeholder="https://api.example.com/anthropic"')
+  })
+})

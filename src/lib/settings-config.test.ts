@@ -39,10 +39,10 @@ describe('applyConfigCommit（F1：commitConfig 端点草稿隔离）', () => {
     expect(toPersist.modelPool).toHaveLength(2)
   })
 
-  test('toDisplay 把落盘结果的 providers 换回本地草稿，避免正在编辑的输入被回滚', () => {
+  test('toDisplay 回护打字中的端点草稿，避免正在编辑的输入被回滚', () => {
     const persisted = baseConfig()
     const draft = baseConfig({
-      providers: { ...DEFAULT_PROVIDER_SETTINGS, deepseek: { baseUrl: 'https://ap' } },
+      providers: { ...DEFAULT_PROVIDER_SETTINGS, deepseek: { baseUrl: 'https://ap', wire: 'anthropic' } },
     })
     const mutate = (current: AppConfig): AppConfig => ({ ...current, primaryModelKey: DEFAULT_PRIMARY_MODEL_KEY })
 
@@ -53,6 +53,30 @@ describe('applyConfigCommit（F1：commitConfig 端点草稿隔离）', () => {
 
     expect(display.providers.deepseek.baseUrl).toBe('https://ap')
     expect(display.primaryModelKey).toBe(saved.primaryModelKey)
+  })
+
+  test('toDisplay 只回护 baseUrl：落盘后的 wire 透出，不被陈旧草稿回滚（PR #13 review 阻断项第一步）', () => {
+    const persisted = baseConfig({
+      providers: { ...DEFAULT_PROVIDER_SETTINGS, custom: { baseUrl: '', wire: 'anthropic' } },
+    })
+    // 草稿里 custom 的 wire 停在切换前的旧值（onModelWireChange 只落盘、不逐键同步草稿）。
+    const draft = baseConfig({
+      providers: { ...DEFAULT_PROVIDER_SETTINGS, custom: { baseUrl: 'https://gw.example.com/v1', wire: 'anthropic' } },
+    })
+    const mutate = (current: AppConfig): AppConfig => ({
+      ...current,
+      providers: { ...current.providers, custom: { ...current.providers.custom, wire: 'openai' } },
+    })
+
+    const { toPersist, toDisplay } = applyConfigCommit(persisted, draft, mutate)
+    const display = toDisplay(toPersist)
+
+    // 磁盘（toPersist）拿到 openai……
+    expect(toPersist.providers.custom.wire).toBe('openai')
+    // ……显示层也必须是 openai——陈旧草稿只允许回护 baseUrl，不许回滚 wire。
+    expect(display.providers.custom.wire).toBe('openai')
+    // 打字中的端点草稿仍受保护。
+    expect(display.providers.custom.baseUrl).toBe('https://gw.example.com/v1')
   })
 
   test('mutate 不读 draft——即便 draft 池与 persisted 不同，toPersist 只继承 persisted 的池', () => {
@@ -73,27 +97,46 @@ describe('mergeProviderDraft（终审修复 F1②：onTestConnection 落盘前�
     const persisted = baseConfig()
     // 用户在 deepseek（A）留了半成品端点后切到 glm（B），本地 draft 仍带着 A 的半成品。
     const draft = baseConfig({
-      providers: { ...DEFAULT_PROVIDER_SETTINGS, deepseek: { baseUrl: 'https://ap' } },
+      providers: { ...DEFAULT_PROVIDER_SETTINGS, deepseek: { baseUrl: 'https://ap', wire: 'anthropic' } },
     })
 
     const toSave = mergeProviderDraft(persisted, draft, 'glm')
 
-    // B 渠道（glm）的草稿被合并进去。
-    expect(toSave.providers.glm).toBe(draft.providers.glm)
+    // B 渠道（glm）的端点草稿被合并进去；wire 等其余字段取 persisted（字段级合并）。
+    expect(toSave.providers.glm.baseUrl).toBe(draft.providers.glm.baseUrl)
+    expect(toSave.providers.glm.wire).toBe(persisted.providers.glm.wire)
     // A 渠道（deepseek）的半成品草稿绝不出现，落盘对象里仍是 persisted 的值。
     expect(toSave.providers.deepseek.baseUrl).toBe(DEFAULT_PROVIDER_SETTINGS.deepseek.baseUrl)
     expect(toSave.providers.deepseek.baseUrl).not.toBe('https://ap')
   })
 
-  test('当前渠道自身的草稿会被正确合并进落盘对象', () => {
+  test('当前渠道自身的端点草稿会被正确合并进落盘对象', () => {
     const persisted = baseConfig()
     const draft = baseConfig({
-      providers: { ...DEFAULT_PROVIDER_SETTINGS, glm: { baseUrl: 'https://custom.glm.example' } },
+      providers: { ...DEFAULT_PROVIDER_SETTINGS, glm: { baseUrl: 'https://custom.glm.example', wire: 'anthropic' } },
     })
 
     const toSave = mergeProviderDraft(persisted, draft, 'glm')
 
     expect(toSave.providers.glm.baseUrl).toBe('https://custom.glm.example')
+    expect(toSave.providers.glm.wire).toBe(persisted.providers.glm.wire)
+  })
+
+  test('只取草稿 baseUrl：磁盘上已落盘的 wire 不被陈旧草稿覆盖（PR #13 review 阻断项第二步）', () => {
+    // 切换协议落盘成功后磁盘是 openai，但 UI 草稿里 wire 还停在旧值 anthropic。
+    const persisted = baseConfig({
+      providers: { ...DEFAULT_PROVIDER_SETTINGS, custom: { baseUrl: 'https://gw.example.com/v1', wire: 'openai' } },
+    })
+    const draft = baseConfig({
+      providers: { ...DEFAULT_PROVIDER_SETTINGS, custom: { baseUrl: 'https://gw.example.com/v1', wire: 'anthropic' } },
+    })
+
+    const toSave = mergeProviderDraft(persisted, draft, 'custom')
+
+    // 端点草稿（baseUrl）照常带入……
+    expect(toSave.providers.custom.baseUrl).toBe('https://gw.example.com/v1')
+    // ……但 wire 只认磁盘：陈旧的 anthropic 不许把 openai 覆盖回去。
+    expect(toSave.providers.custom.wire).toBe('openai')
   })
 
   test('其余字段（modelPool 等）原样继承 persisted，不受 draft 影响', () => {
