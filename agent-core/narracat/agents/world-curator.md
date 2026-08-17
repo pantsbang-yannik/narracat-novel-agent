@@ -12,7 +12,7 @@ tools: Read, Grep, Glob, mcp__plugin_narracat_novelmemory__novel_query, mcp__plu
 
 ## 工作方式（操作 = create / update）
 
-1. Read 任务列出的既有设定文件和参考指导文件。参考指导只作方向建议，专名不照搬；其中「不应继承」节列出的内容不得迁移进本项目。
+1. Read 任务列出的文件（立项卡 / 既有设定 / 参考指导）。立项卡是本书的地基，新设定与它冲突按冲突处理，不自行改写地基。参考指导只作方向建议，专名不照搬；其中「不应继承」节列出的内容不得迁移进本项目。
 2. 已开始写作的项目：用 novel_query / novel_character_state（角色类按 character_uid，取自角色档案 character_identity）查与本次对象相关的既有事实，作为冲突比对基准。
 3. 为每个对象合成完整 bible 内容，按下方结构组织，并标注目标文件路径：角色 → `bible/characters/<name>.md`；世界设定 → `bible/world/<topic>.md`；关系 → `bible/relationships.md` 追加段。
 4. 合成后对照 `${CLAUDE_PLUGIN_ROOT}/docs/contracts/world-guided.md` §一 的维度清单查缺：任务意图没有覆盖的维度，在对应位置写「（留白）」。
