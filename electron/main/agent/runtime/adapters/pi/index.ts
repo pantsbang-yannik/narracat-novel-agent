@@ -38,6 +38,7 @@ import type { MemoryToolChannel, PiMemoryBridge } from './pi-memory-tools.ts'
 import { runPiSession } from './pi-session.ts'
 import type { PiRunOptions, RunPiSessionArgs } from './pi-session.ts'
 import { mapPiMessageToAgentEvents, PI_SESSION_MESSAGE_TYPE } from './pi-event-mapper.ts'
+import { createPiEagerToolArgsRestorer } from './pi-eager-toolcall-args.ts'
 import { createPiEngineHooksExtension } from './pi-engine-hooks.ts'
 import { createSubagentEventChannel, createTaskCardTools, createTaskTool } from './pi-subagent.ts'
 import { createAskUserQuestionTool, createPiToolGuard, mapSdkToolFaceToPi } from './pi-tool-guard.ts'
@@ -100,7 +101,12 @@ async function buildPiRunOptions(
   // 引擎钩子（字数提示/任务书系统词硬门）只在 loadNarraCatRuntime 时挂：学习/向导等沙盒会话
   // 本就不跑引擎契约，与 SDK 侧同条件不装载 plugin 对齐（brief 见 Task 5 任务书）。
   const agentDir = join(args.userDataPath ?? args.appRoot, 'pi-agent')
-  const extensions = args.loadNarraCatRuntime ? [guard, createPiEngineHooksExtension({ cwd })] : [guard]
+  // eager 工具参数救回（issue #16）修的是 pi 传输层的参数丢失，与引擎契约无关：任何会话都可能
+  // 中招（学习/向导沙盒、direct-chat 一样打 Anthropic wire），故不受 loadNarraCatRuntime 门控。
+  // 排在最前：它把被抹空的参数补回后，后续扩展看到的才是模型真正发出的那份。
+  const extensions = args.loadNarraCatRuntime
+    ? [createPiEagerToolArgsRestorer(), guard, createPiEngineHooksExtension({ cwd })]
+    : [createPiEagerToolArgsRestorer(), guard]
 
   // NovelMemory 工具（切片⑥）：与 SDK createNovelMemoryMcpServers 同门条件（跑引擎契约 + 有项目），
   // face 无记忆名（如 direct-chat 默认面）时零装载。
@@ -149,7 +155,9 @@ async function buildPiRunOptions(
       maxTurns: SUBAGENT_MAX_TURNS,
       systemPrompt: definition.prompt,
       abortController: childAbort,
-      extensions: [childGuard, createPiEngineHooksExtension({ cwd })],
+      // 各子会话新起一个实例：救回逻辑的 eager 快照是扩展闭包内的 run 级状态，共用实例会让
+      // 并发子会话互相串参数。
+      extensions: [createPiEagerToolArgsRestorer(), childGuard, createPiEngineHooksExtension({ cwd })],
       customTools: childMemoryTools,
     }
   }

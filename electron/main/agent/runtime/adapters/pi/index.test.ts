@@ -162,8 +162,8 @@ describe('切片③ 权限门禁接线', () => {
   test('guard 扩展始终注入且允许根含 novelRootDir/projectPath/cwd', async () => {
     const adapter = createPiAdapter()
     const options = (await adapter.createRunOptions(makeRunConfig())) as PiRunOptions
-    expect(options.extensions).toHaveLength(1)
-    expect(options.extensions[0].handlers.has('tool_call')).toBe(true)
+    expect(options.extensions).toHaveLength(2)
+    expect(options.extensions.some((extension) => extension.handlers.has('tool_call'))).toBe(true)
   })
 
   test('computeBaselineAllowedRoots：四根去重去空——projectPath 与 cwd 不同时各留一条', () => {
@@ -208,7 +208,7 @@ describe('切片③ 权限门禁接线', () => {
     expect(options.tools).toEqual(['read', 'write', 'find'])
     expect(options.cwd).toBe('/tmp/sandbox-ws')
     expect(options.customTools).toHaveLength(0)
-    expect(options.extensions).toHaveLength(1)
+    expect(options.extensions).toHaveLength(2)
   })
 
   test('createSandboxedRunOptions 沙盒路径同规持久化：resume 翻成 sessionStore.resumeSessionId（对齐 SDK persistSession 默认，向导轮次续接同构）', async () => {
@@ -228,17 +228,50 @@ describe('切片④ 引擎钩子接线', () => {
   test('loadNarraCatRuntime=true → extensions 含 guard + engine-hooks 两个扩展', async () => {
     const adapter = createPiAdapter()
     const options = (await adapter.createRunOptions(makeRunConfig({ loadNarraCatRuntime: true }))) as PiRunOptions
-    expect(options.extensions).toHaveLength(2)
-    expect(options.extensions[0].handlers.has('tool_call')).toBe(true)
-    expect(options.extensions[1].handlers.has('tool_result')).toBe(true)
+    expect(options.extensions).toHaveLength(3)
+    expect(options.extensions.some((extension) => extension.handlers.has('tool_call'))).toBe(true)
+    expect(options.extensions.some((extension) => extension.handlers.has('tool_result'))).toBe(true)
   })
 
   test('loadNarraCatRuntime 缺省/false → 只有 guard，不挂引擎钩子', async () => {
     const adapter = createPiAdapter()
     const withoutFlag = (await adapter.createRunOptions(makeRunConfig())) as PiRunOptions
-    expect(withoutFlag.extensions).toHaveLength(1)
+    expect(withoutFlag.extensions.some((extension) => extension.handlers.has('tool_result'))).toBe(false)
+    expect(withoutFlag.extensions).toHaveLength(2)
     const withFalse = (await adapter.createRunOptions(makeRunConfig({ loadNarraCatRuntime: false }))) as PiRunOptions
-    expect(withFalse.extensions).toHaveLength(1)
+    expect(withFalse.extensions.some((extension) => extension.handlers.has('tool_result'))).toBe(false)
+    expect(withFalse.extensions).toHaveLength(2)
+  })
+})
+
+/**
+ * issue #16 接线锁：eager 工具参数救回修的是 pi 传输层，与引擎契约无关，必须在**所有**会话形态上
+ * 挂载。这条测试的意义是防止将来有人顺手把它并进 loadNarraCatRuntime 门控里——真那样，学习/
+ * 向导沙盒与 direct-chat 会在 eager 端点上重新开始丢参数，而且是静默丢。
+ */
+describe('eager 工具参数救回接线（issue #16）', () => {
+  const hasEagerRestorer = (extensions: PiRunOptions['extensions']) =>
+    extensions.some((extension) => extension.handlers.has('message_update') && extension.handlers.has('message_end'))
+
+  test('主会话三种门控形态下都挂载', async () => {
+    const adapter = createPiAdapter()
+    for (const config of [
+      makeRunConfig(),
+      makeRunConfig({ loadNarraCatRuntime: false }),
+      makeRunConfig({ loadNarraCatRuntime: true }),
+    ]) {
+      const options = (await adapter.createRunOptions(config)) as PiRunOptions
+      expect(hasEagerRestorer(options.extensions)).toBe(true)
+    }
+  })
+
+  test('沙盒会话（学习/向导）同样挂载', async () => {
+    const adapter = createPiAdapter()
+    const options = (await adapter.createSandboxedRunOptions({
+      ...makeRunConfig(),
+      sandbox: { tools: ['Read'], workspaceDir: '/tmp/sandbox-ws' },
+    } as never)) as PiRunOptions
+    expect(hasEagerRestorer(options.extensions)).toBe(true)
   })
 })
 
