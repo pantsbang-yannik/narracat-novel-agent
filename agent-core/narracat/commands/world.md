@@ -37,6 +37,8 @@ allowed-tools: [Agent, Read, Write, Edit, Glob, Grep, AskUserQuestion, mcp__plug
 
 ## 步骤 3: 派发 world-curator（合成）
 
+先 Glob `bible/world/*.md` 与 `bible/characters/*.md` 取实际路径，`bible/relationships.md` 存在则一并计入，全部逐条列进下面的「既有设定文件」——策展人只读这份清单，漏列的设定就不在冲突检测的比对范围内。create 与 update 都要枚举：新对象同样会撞上既有关系与世界规则。
+
 一次 Task 调用覆盖本次全部对象，world-curator 只做内容合成与冲突检测，不落盘、不调用提交工具：
 
 ```
@@ -45,7 +47,7 @@ Task(world-curator): "操作: {create | update}
 - {对象 1: 意图}
 - {…}
 用户对话中确认的要点: {步骤 2 采集结果，无则省略}
-既有设定文件: {相关 bible/ 文件路径列表}
+既有设定文件: {上一步枚举得到的全部路径，逐条列出}
 状态词表: {bible/state-vocabulary.json 存在则传路径，否则省略}
 参考指导文件: {bible/reference-guidance/ 下存在的 premise.md / world.md / characters.md 路径，无则省略}
 返回: 每个对象的完整 bible 内容（标注目标文件路径）+ conflicts[] + 状态词表草案（对象中含角色时）+ 每个核心角色的结构化字段草案（name/aliases/gender/age/initial_states，对象中含角色时）"
