@@ -10,6 +10,8 @@ import {
   findFirstStagedRuntimePayloadViolation,
   hasPrunedMcpNodeModuleDirectory,
   pruneStagedMcpRuntimePayload,
+  resolveNativeTarget,
+  resolveNativeTargetFromArgv,
   shouldBundleAgentCorePath,
   shouldPruneForeignPlatformBinary,
   shouldPruneMcpDistFile,
@@ -261,5 +263,76 @@ describe('NarraCat Agent Core 打包白名单', () => {
         await rm(destination, { recursive: true, force: true })
       }
     })
+  })
+})
+
+describe('打包目标平台参数化（Windows 战役）', () => {
+  test('resolveNativeTarget 给出平台 / 架构 / 共享库扩展名三件套', () => {
+    expect(resolveNativeTarget('darwin')).toEqual({ platform: 'darwin', arch: 'arm64', sharedLibExt: '.dylib' })
+    expect(resolveNativeTarget('win32')).toEqual({ platform: 'win32', arch: 'x64', sharedLibExt: '.dll' })
+  })
+
+  test('不支持的平台直接 fail-loud，不静默按 darwin 处理', () => {
+    expect(() => resolveNativeTarget('linux')).toThrow(/不支持的打包目标平台/)
+  })
+
+  test('目标为 win32 时：保留 win32/x64，裁掉 darwin 与其他架构', () => {
+    const target = resolveNativeTarget('win32')
+    const base = 'mcp-server/node_modules/onnxruntime-node/bin/napi-v3'
+    expect(shouldPruneForeignPlatformBinary(`${base}/win32/x64/onnxruntime_binding.node`, target)).toBe(false)
+    expect(shouldPruneForeignPlatformBinary(`${base}/win32/x64/onnxruntime.dll`, target)).toBe(false)
+    expect(shouldPruneForeignPlatformBinary(`${base}/win32`, target)).toBe(false)
+    expect(shouldPruneForeignPlatformBinary(`${base}/win32/arm64/onnxruntime_binding.node`, target)).toBe(true)
+    expect(shouldPruneForeignPlatformBinary(`${base}/darwin/arm64/onnxruntime_binding.node`, target)).toBe(true)
+    expect(shouldPruneForeignPlatformBinary(`${base}/linux/x64/onnxruntime_binding.node`, target)).toBe(true)
+  })
+
+  test('省略 target 时沿用当前进程平台（mac 本机打包的既有行为不变）', () => {
+    const base = 'mcp-server/node_modules/onnxruntime-node/bin/napi-v3'
+    const foreign = process.platform === 'win32' ? 'darwin' : 'win32'
+    expect(shouldPruneForeignPlatformBinary(`${base}/${foreign}/x64/onnxruntime_binding.node`)).toBe(true)
+  })
+
+  test('shouldBundleAgentCorePath 把 target 透传给平台裁剪谓词', () => {
+    const target = resolveNativeTarget('win32')
+    const base = 'mcp-server/node_modules/onnxruntime-node/bin/napi-v3'
+    expect(shouldBundleAgentCorePath(`${base}/win32/x64/onnxruntime_binding.node`, target)).toBe(true)
+    expect(shouldBundleAgentCorePath(`${base}/darwin/arm64/onnxruntime_binding.node`, target)).toBe(false)
+  })
+
+  // CI 里写的是 `--platform $TARGET`。变量拼空时 argv 只剩一个裸 `--platform`，
+  // 若此时回落到「当前进程平台」，就会静默打出 darwin 包并当成 Windows 包分发出去——
+  // embedding 在用户机上无声失效，正是 issue #312/#316/#320 那类前科。必须炸。
+  test('--platform 缺值时 fail-loud，不静默回落到当前平台', () => {
+    expect(() => resolveNativeTargetFromArgv(['node', 'stage.mjs', '--platform'])).toThrow(/--platform 缺少取值/)
+    expect(() => resolveNativeTargetFromArgv(['node', 'stage.mjs', '--platform', '--verbose'])).toThrow(
+      /--platform 缺少取值/,
+    )
+  })
+
+  test('argv 无 --platform 时用当前进程平台；给了值就按值解析', () => {
+    expect(resolveNativeTargetFromArgv(['node', 'stage.mjs'])).toEqual(resolveNativeTarget(process.platform))
+    expect(resolveNativeTargetFromArgv(['node', 'stage.mjs', '--platform', 'win32'])).toEqual(
+      resolveNativeTarget('win32'),
+    )
+    expect(() => resolveNativeTargetFromArgv(['node', 'stage.mjs', '--platform', 'linux'])).toThrow(
+      /不支持的打包目标平台/,
+    )
+  })
+
+  test('正向断言按目标平台找对应的共享库扩展名（win 找 .dll，不是 .dylib）', async () => {
+    const target = resolveNativeTarget('win32')
+    const root = await mkdtemp(join(tmpdir(), 'narracat-stage-win-'))
+    try {
+      const binaryDir = join(root, 'mcp-server', 'node_modules', 'onnxruntime-node', 'bin', 'napi-v3', 'win32', 'x64')
+      await mkdir(binaryDir, { recursive: true })
+      await writeFile(join(binaryDir, 'onnxruntime_binding.node'), 'x')
+      // 只有 .node、缺共享库 → 必须炸
+      await expect(assertBundledOnnxRuntimeNativeBinaryPresent(root, target)).rejects.toThrow(/不完整/)
+      await writeFile(join(binaryDir, 'onnxruntime.dll'), 'x')
+      await assertBundledOnnxRuntimeNativeBinaryPresent(root, target)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 })

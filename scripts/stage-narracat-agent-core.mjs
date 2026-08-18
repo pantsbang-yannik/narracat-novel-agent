@@ -126,29 +126,63 @@ function getNodeModulePackageRelativeSegments(segments) {
 }
 
 // onnxruntime-node 随包携带 5 个平台的预编译二进制（darwin/linux/win32 × x64/arm64），实测共 208MB。
-// 本产品只分发 macOS arm64：裁掉其余 ~176MB，同时缩小公证需上传给 Apple 扫描的 Mach-O 面。
+// 本产品每个平台只发一个架构：裁掉其余的，同时缩小 mac 公证需上传给 Apple 扫描的 Mach-O 面。
 // 裁剪正确性由「设置页向量健康诊断体检卡」直接证伪——裁坏则 embedding 必然失败。
-export const BUNDLED_NATIVE_PLATFORM = 'darwin'
-export const BUNDLED_NATIVE_ARCH = 'arm64'
+//
+// sharedLibExt 必须跟着平台走：darwin 是 .dylib、win32 是 .dll。只改目录名不改扩展名，
+// 下面的正向断言会在 Windows 上永远失败（Windows 战役 2026-08-16）。
+export const NATIVE_TARGETS = {
+  darwin: { platform: 'darwin', arch: 'arm64', sharedLibExt: '.dylib' },
+  win32: { platform: 'win32', arch: 'x64', sharedLibExt: '.dll' },
+}
 
-export function shouldPruneForeignPlatformBinary(relPath) {
+/** 解析打包目标；不认识的平台 fail-loud，绝不静默按 darwin 处理（那会裁光目标平台的二进制）。 */
+export function resolveNativeTarget(platform = process.platform) {
+  const target = NATIVE_TARGETS[platform]
+  if (!target) {
+    throw new Error(
+      `不支持的打包目标平台：${platform}（当前只分发 darwin/arm64 与 win32/x64，见 Windows 战役决策 8b）`,
+    )
+  }
+  return target
+}
+
+/**
+ * 从命令行参数解析打包目标。Task 5/7/8 的脚本共用同一套 `--platform` 语义。
+ *
+ * `--platform` 出现但没跟值必须炸：CI 里写的是 `--platform $TARGET`，变量拼空时 argv 只剩
+ * 一个裸 flag，若此时回落到「当前进程平台」，就会静默打出 darwin 包再当 Windows 包发出去——
+ * embedding 在用户机上无声失效，且打包全程 exit 0（前科：issue #312/#316/#320）。
+ */
+export function resolveNativeTargetFromArgv(argv = process.argv) {
+  const platformIndex = argv.indexOf('--platform')
+  if (platformIndex === -1) return resolveNativeTarget()
+
+  const value = argv[platformIndex + 1]
+  if (!value || value.startsWith('--')) {
+    throw new Error('--platform 缺少取值（用法：--platform darwin|win32；留空会静默按当前平台打包，已禁止）')
+  }
+  return resolveNativeTarget(value)
+}
+
+export function shouldPruneForeignPlatformBinary(relPath, target = resolveNativeTarget()) {
   const segments = toPosix(relPath).split('/').filter(Boolean)
   const packageIndex = segments.indexOf('onnxruntime-node')
   if (packageIndex === -1) return false
 
   const [binDir, abiDir, platform, arch] = segments.slice(packageIndex + 1)
   if (binDir !== 'bin' || abiDir !== 'napi-v3' || !platform) return false
-  if (platform !== BUNDLED_NATIVE_PLATFORM) return true
+  if (platform !== target.platform) return true
   // 目标平台目录自身放行，以便 fs.cp 递归进去后再逐个架构判定
   if (!arch) return false
-  return arch !== BUNDLED_NATIVE_ARCH
+  return arch !== target.arch
 }
 
 /**
  * 默认拒绝白名单谓词：给定相对 agent-core 根的路径，决定是否进入打包产物。
  * 设计为可被 fs.cp 的 filter 直接调用——对「白名单路径的祖先目录」返回 true 以允许递归。
  */
-export function shouldBundleAgentCorePath(relPath) {
+export function shouldBundleAgentCorePath(relPath, target = resolveNativeTarget()) {
   const rel = toPosix(relPath)
   if (rel === '') return true
 
@@ -160,7 +194,7 @@ export function shouldBundleAgentCorePath(relPath) {
   if (base === '.DS_Store') return false
 
   // 非目标平台的预编译二进制（在 node_modules 不透明照搬之前拦下）
-  if (shouldPruneForeignPlatformBinary(rel)) return false
+  if (shouldPruneForeignPlatformBinary(rel, target)) return false
 
   // node_modules 内部视为不透明：生产依赖已 prune，照搬，不对其套 test/__tests__ 剔除
   // （以免误删某个包运行期真需要的 test 命名文件）。
@@ -186,13 +220,13 @@ export function shouldBundleAgentCorePath(relPath) {
   return false
 }
 
-// shouldPruneForeignPlatformBinary 硬编码了 `bin/napi-v3/darwin/arm64` 这条 ABI/平台目录路径。若 onnxruntime-node 未来
+// shouldPruneForeignPlatformBinary 硬编码了 `bin/napi-v3/<平台>/<架构>` 这条 ABI/平台目录路径。若 onnxruntime-node 未来
 // 升级改了 ABI 目录名（如 napi-v4）：裁剪谓词全线不匹配 → 静默失效 → 5 个平台的二进制照单全收，
 // 只是包变胖，无害。但若改了平台目录名，则会误裁我们需要的那份 → 静默裁过头 → embedding 在加固
 // 运行时下无声失效、且无任何报错（本项目前科：issue #312/#316/#320）。这条正向断言就是防「误裁」的：
-// 暂存树里必须真的还留着 darwin/arm64 的 .node 与 .dylib，缺了就在打包这一步直接炸，而不是留到
-// 用户设置页「向量健康诊断」体检卡才发现。
-export async function assertBundledOnnxRuntimeNativeBinaryPresent(destination) {
+// 暂存树里必须真的还留着目标平台的 .node 与共享库（mac .dylib / win .dll），缺了就在打包这一步直接炸，
+// 而不是留到用户设置页「向量健康诊断」体检卡才发现。
+export async function assertBundledOnnxRuntimeNativeBinaryPresent(destination, target = resolveNativeTarget()) {
   const binaryDir = join(
     destination,
     'mcp-server',
@@ -200,21 +234,21 @@ export async function assertBundledOnnxRuntimeNativeBinaryPresent(destination) {
     'onnxruntime-node',
     'bin',
     'napi-v3',
-    BUNDLED_NATIVE_PLATFORM,
-    BUNDLED_NATIVE_ARCH,
+    target.platform,
+    target.arch,
   )
   if (!(await pathExists(binaryDir))) {
     throw new Error(
-      `暂存产物缺少 onnxruntime-node 的 ${BUNDLED_NATIVE_PLATFORM}/${BUNDLED_NATIVE_ARCH} 二进制目录：${binaryDir}` +
+      `暂存产物缺少 onnxruntime-node 的 ${target.platform}/${target.arch} 二进制目录：${binaryDir}` +
         '（裁剪可能裁过头，embedding 会静默失效——检查 shouldPruneForeignPlatformBinary 是否还匹配当前 onnxruntime-node 版本的目录结构）',
     )
   }
   const entries = await readdir(binaryDir)
   const hasNativeModule = entries.some((name) => name.endsWith('.node'))
-  const hasDylib = entries.some((name) => name.endsWith('.dylib'))
-  if (!hasNativeModule || !hasDylib) {
+  const hasSharedLib = entries.some((name) => name.endsWith(target.sharedLibExt))
+  if (!hasNativeModule || !hasSharedLib) {
     throw new Error(
-      `暂存产物的 onnxruntime-node ${BUNDLED_NATIVE_PLATFORM}/${BUNDLED_NATIVE_ARCH} 目录不完整（.node 存在=${hasNativeModule}，.dylib 存在=${hasDylib}）：${binaryDir}` +
+      `暂存产物的 onnxruntime-node ${target.platform}/${target.arch} 目录不完整（.node 存在=${hasNativeModule}，${target.sharedLibExt} 存在=${hasSharedLib}）：${binaryDir}` +
         '（裁剪可能裁过头，embedding 会静默失效）',
     )
   }
@@ -230,7 +264,7 @@ async function pathExists(path) {
 }
 
 /** 回归守卫：暂存目录必须含运行时关键资产、且不含任何研发痕迹，否则 throw 中断打包。 */
-export async function verifyStagedAgentCore(destination) {
+export async function verifyStagedAgentCore(destination, target = resolveNativeTarget()) {
   const required = [
     'narracat.manifest.json',
     join('mcp-server', 'dist', 'index.js'),
@@ -262,7 +296,7 @@ export async function verifyStagedAgentCore(destination) {
   if (await pathExists(join(destination, 'mcp-server', 'node_modules', 'onnxruntime-web'))) {
     throw new Error('暂存产物仍含 onnxruntime-web（packaged MCP 使用 Node backend，应禁止 Web backend 随包外发）')
   }
-  await assertBundledOnnxRuntimeNativeBinaryPresent(destination)
+  await assertBundledOnnxRuntimeNativeBinaryPresent(destination, target)
   const runtimePayloadViolation = await findFirstStagedRuntimePayloadViolation(destination)
   if (runtimePayloadViolation) {
     throw new Error(`暂存产物仍含 MCP runtime 开发型文件：${runtimePayloadViolation}`)
@@ -382,7 +416,7 @@ async function assertNoAbsoluteSymlinks(root) {
   }
 }
 
-export async function stageNarraCatAgentCore({ root = repoRoot } = {}) {
+export async function stageNarraCatAgentCore({ root = repoRoot, target = resolveNativeTarget() } = {}) {
   const source = join(root, 'agent-core', 'narracat')
   const destination = join(root, STAGED_AGENT_CORE_DIR)
 
@@ -394,19 +428,26 @@ export async function stageNarraCatAgentCore({ root = repoRoot } = {}) {
   await mkdir(dirname(destination), { recursive: true })
   await cp(source, destination, {
     recursive: true,
-    filter: (src) => shouldBundleAgentCorePath(relative(source, src)),
+    filter: (src) => shouldBundleAgentCorePath(relative(source, src), target),
   })
 
   await pruneStagedMcpServerDevDependencies(destination)
   await pruneStagedMcpRuntimePayload(destination)
-  await verifyStagedAgentCore(destination)
-  console.log(`NarraCat Agent Core 已按白名单暂存：${source} -> ${destination}`)
+  await verifyStagedAgentCore(destination, target)
+  console.log(
+    `NarraCat Agent Core 已按白名单暂存（目标 ${target.platform}/${target.arch}）：${source} -> ${destination}`,
+  )
   return destination
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  stageNarraCatAgentCore().catch((error) => {
-    console.error(error instanceof Error ? error.message : error)
-    process.exitCode = 1
-  })
+  // 架构由平台唯一确定，不单独收 --arch：每个平台只发一个架构，少一个可以写歪的旋钮。
+  // 参数解析放进 async 链里，让它和暂存过程共用同一个错误出口（干净一行 + exit 1），
+  // 而不是在顶层同步 throw 出一坨 Node 堆栈。
+  Promise.resolve()
+    .then(() => stageNarraCatAgentCore({ target: resolveNativeTargetFromArgv() }))
+    .catch((error) => {
+      console.error(error instanceof Error ? error.message : error)
+      process.exitCode = 1
+    })
 }
