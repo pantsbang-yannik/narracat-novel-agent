@@ -9,6 +9,7 @@ import {
   auditPackagedResourceEntries,
   classifyAsarEntry,
   classifyPackagedResourceEntry,
+  normalizeAsarEntry,
   resolvePackagedAppPath,
   resolvePackagedAsarPath,
   resolvePackagedLayout,
@@ -148,6 +149,41 @@ describe('packaged app.asar boundary audit', () => {
       join('/repo', 'dist', 'custom', 'NarraCat.app', 'Contents', 'Resources', 'app.asar'),
     )
     expect(resolvePackagedAsarPath(['--asar=dist/app.asar'], '/repo')).toBe(join('/repo', 'dist', 'app.asar'))
+  })
+})
+
+describe('asar 条目路径分隔符归一化（Windows 战役 2026-08-18 CI 实撞）', () => {
+  // @electron/asar 在 Windows 上返回反斜杠路径。不归一化的话按 '/' 切分会把
+  // 整条路径当成一个「顶层条目」，于是**每一条**都判违规——实测 29246 条全红，
+  // 而 mac 上完全正常。这类问题只在 Windows 出现，本机跑测试永远发现不了。
+  test('反斜杠路径归一化成正斜杠', () => {
+    expect(normalizeAsarEntry('\\node_modules\\@anthropic-ai\\sdk\\core\\resource.mjs')).toBe(
+      'node_modules/@anthropic-ai/sdk/core/resource.mjs',
+    )
+    expect(normalizeAsarEntry('\\out\\main\\index.js')).toBe('out/main/index.js')
+  })
+
+  test('Windows 反斜杠条目按正常规则分类，不再被误判为顶层违规', () => {
+    expect(classifyAsarEntry('\\node_modules\\keytar\\package.json')).toEqual({
+      ok: true,
+      path: 'node_modules/keytar/package.json',
+    })
+    expect(classifyAsarEntry('\\out\\main\\index.js').ok).toBe(true)
+  })
+
+  test('正斜杠路径行为不变（mac 回归）', () => {
+    expect(normalizeAsarEntry('/node_modules/keytar/package.json')).toBe('node_modules/keytar/package.json')
+    expect(normalizeAsarEntry('pack: /out/main/index.js')).toBe('out/main/index.js')
+  })
+
+  test('资源条目同样归一化（extraResources 走同一个谓词）', () => {
+    const winTarget = resolveNativeTarget('win32')
+    expect(
+      classifyPackagedResourceEntry(
+        '\\NarraCatAgentCore\\mcp-server\\node_modules\\onnxruntime-node\\bin\\napi-v3\\darwin\\arm64\\onnxruntime_binding.node',
+        winTarget,
+      ).ok,
+    ).toBe(false)
   })
 })
 

@@ -159,10 +159,16 @@ export async function assertPackagedLocalesPresent(appPath, layout = resolvePack
 }
 
 export function normalizeAsarEntry(entry) {
-  return entry
-    .replace(/^(pack|unpack)\s*:\s*/, '')
-    .replace(/^\/+/, '')
-    .trim()
+  return (
+    entry
+      .replace(/^(pack|unpack)\s*:\s*/, '')
+      // @electron/asar 在 Windows 上返回反斜杠路径。不归一化的话，下面按 '/' 切分会把
+      // 整条路径当成单个「顶层条目」，于是每一条都判违规——2026-08-18 Windows 战役 CI
+      // 实撞 29246 条全红，而 mac 上完全正常。
+      .replace(/\\/g, '/')
+      .replace(/^\/+/, '')
+      .trim()
+  )
 }
 
 function hasForbiddenPathPrefix(entry, prefix) {
