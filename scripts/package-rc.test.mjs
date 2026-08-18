@@ -14,6 +14,7 @@ import {
   findMissingNotarizeEnv,
   packagedAppBinaryPath,
   resolveStepEnv,
+  runPackageRc,
 } from './package-rc.mjs'
 import { DEFAULT_APP_PATH } from './verify-signed-artifact.mjs'
 
@@ -74,6 +75,69 @@ describe('RC package script', () => {
     expect(steps[10].args.some((arg) => arg.endsWith('/scripts/audit-packaged-app-boundary.mjs'))).toBe(true)
     expect(steps[12].args.some((arg) => arg.endsWith('/scripts/verify-signed-artifact.mjs'))).toBe(true)
     expect(steps[12].args).not.toContain('--notarized')
+  })
+})
+
+describe('Windows 打包档（Windows 战役 2026-08-16）', () => {
+  const winSteps = () => createPackageRcSteps({ clientVersion: '0.1.1880', platform: 'win32' })
+
+  test('不跑任何 macOS 专有的签名 / 公证步骤', () => {
+    const labels = winSteps().map((step) => step.label)
+    expect(labels.some((label) => label.includes('signing identity'))).toBe(false)
+    expect(labels.some((label) => label.includes('notarize'))).toBe(false)
+    expect(labels.some((label) => label.includes('verify signed artifact'))).toBe(false)
+  })
+
+  test('electron-builder 传 --win nsis --x64', () => {
+    const build = winSteps().find((step) => step.label.includes('package Windows'))
+    expect(build.args).toContain('--win')
+    expect(build.args).toContain('nsis')
+    expect(build.args).toContain('--x64')
+    expect(build.args).toContain('--config.extraMetadata.version=0.1.1880')
+  })
+
+  test('stage 与 audit 都收到 --platform win32（否则会裁光 win 二进制 / 找错产物目录）', () => {
+    const steps = winSteps()
+    const stage = steps.find((step) => step.label.includes('stage NarraCat Agent Core'))
+    expect(stage.args).toContain('--platform')
+    expect(stage.args).toContain('win32')
+    const audit = steps.find((step) => step.label.includes('audit packaged app boundary'))
+    expect(audit.args).toContain('--platform')
+    expect(audit.args).toContain('win32')
+  })
+
+  // smoke packaged app 要真启动 GUI，而 Windows 出包走 CI、流水线从不启动界面；
+  // 且它的 NARRACAT_SMOKE_ELECTRON_BIN 硬编码 mac 的 .app 路径。Windows 侧的产物级
+  // 验证由实体机冷启动走查人工承担。
+  test('Windows 档不含 smoke packaged app（那是 mac 档专属的后置防线）', () => {
+    expect(winSteps().some((step) => step.label === 'smoke packaged app')).toBe(false)
+  })
+
+  // 反向钉死：staged 探针是两平台共享的前置防线，拆 shared 步骤时不能把它一起丢了。
+  test('Windows 档保留 staged 探针（纯命令行，可进 CI）', () => {
+    const labels = winSteps().map((step) => step.label)
+    expect(labels).toContain('probe staged Agent Core runtime')
+    expect(labels.indexOf('probe staged Agent Core runtime')).toBeLessThan(
+      labels.findIndex((label) => label.includes('package Windows')),
+    )
+  })
+
+  test('mac 档一字不变：签名闸第一、产物冒烟仍在', () => {
+    const macSteps = createPackageRcSteps({ clientVersion: '0.1.1880', platform: 'darwin' })
+    expect(macSteps[0].label).toBe('verify Developer ID signing identity')
+    const smoke = macSteps.find((step) => step.label === 'smoke packaged app')
+    expect(smoke).toBeDefined()
+    expect(smoke.env.NARRACAT_SMOKE_REQUIRE_PACKAGED).toBe('1')
+  })
+
+  test('不支持的平台 fail-loud', () => {
+    expect(() => createPackageRcSteps({ clientVersion: '0.1.1880', platform: 'linux' })).toThrow(
+      /不支持的打包目标平台/,
+    )
+  })
+
+  test('Windows 档无条件要求语料 token（没有公证档可以挂钩）', () => {
+    expect(() => runPackageRc({ platform: 'win32', env: {} })).toThrow(/语料服务凭证缺失/)
   })
 })
 

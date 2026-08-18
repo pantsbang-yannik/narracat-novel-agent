@@ -126,21 +126,15 @@ export function resolveStepEnv(step, baseEnv = process.env) {
   return step.env ? { ...baseEnv, ...step.env } : undefined
 }
 
-export function createPackageRcSteps({
-  clientVersion = resolveClientBuildVersion({ root: repoRoot }),
-  notarize = false,
-} = {}) {
-  const dmgPath = dmgArtifactPath(clientVersion)
+/**
+ * mac 与 win 共有的前置步骤（准备引擎、暂存、原生模块、模型、探针、构建）。
+ *
+ * 边界：只放两平台都能跑的东西。mac 专属的签名闸放在 createMacSteps 最前，
+ * mac 专属的产物冒烟放在 createMacSteps 最后——后者要真启动 GUI，而 Windows 出包走 CI、
+ * 流水线从不启动界面，且它的 electron 二进制路径是 mac .app 布局。
+ */
+function createSharedPrepareSteps(platform) {
   return [
-    // 签名身份闸放在第一步：没有 Developer ID 证书时，两档打包都跑不通（打包链本就不面向
-    // 外部克隆者，见 check-signing-identity.mjs 的办证指引）。放最前面是为了让这条硬性前提
-    // 在任何耗时步骤（stage Agent Core / prepare embedding model 等，实测数分钟）之前拦下，
-    // 不要让人先烧掉几分钟才撞见"证书都没有"。
-    {
-      label: 'verify Developer ID signing identity',
-      command: process.execPath,
-      args: [join(repoRoot, 'scripts', 'check-signing-identity.mjs')],
-    },
     {
       label: 'check node runtime',
       command: process.execPath,
@@ -157,9 +151,11 @@ export function createPackageRcSteps({
       args: [join(repoRoot, 'scripts', 'prepare-narracat-agent-core.mjs'), '--if-missing', '--optional'],
     },
     {
+      // --platform 必须传：stage 会把非目标平台的 onnxruntime 二进制全裁掉，
+      // 漏传就在 Windows 上裁光 win32/x64 再断言 darwin 存在，打包中断（Task 4）。
       label: 'stage NarraCat Agent Core (whitelist)',
       command: process.execPath,
-      args: [join(repoRoot, 'scripts', 'stage-narracat-agent-core.mjs')],
+      args: [join(repoRoot, 'scripts', 'stage-narracat-agent-core.mjs'), '--platform', platform],
     },
     {
       label: 'ensure Electron-ABI native modules',
@@ -184,6 +180,41 @@ export function createPackageRcSteps({
       command: bin('electron-vite'),
       args: ['build'],
     },
+  ]
+}
+
+/** Windows 档：未签名 NSIS。没有签名闸、没有公证、没有产物冒烟（见 createSharedPrepareSteps 注释）。 */
+function createWindowsSteps(clientVersion) {
+  return [
+    ...createSharedPrepareSteps('win32'),
+    {
+      // 未签名档：SignPath 的硬条款是「必须已以待签名的形态发布过」，所以第一版就是要发未签名的。
+      // 用户首次运行会撞 SmartScreen「Windows 已保护你的电脑」，下载页文案须交代。
+      label: 'package Windows x64 NSIS 安装包（未签名）',
+      command: bin('electron-builder'),
+      args: ['--win', 'nsis', '--x64', `--config.extraMetadata.version=${clientVersion}`],
+    },
+    {
+      label: 'audit packaged app boundary',
+      command: process.execPath,
+      args: [join(repoRoot, 'scripts', 'audit-packaged-app-boundary.mjs'), '--platform', 'win32'],
+    },
+  ]
+}
+
+function createMacSteps({ clientVersion, notarize }) {
+  const dmgPath = dmgArtifactPath(clientVersion)
+  return [
+    // 签名身份闸放在第一步：没有 Developer ID 证书时，两档打包都跑不通（打包链本就不面向
+    // 外部克隆者，见 check-signing-identity.mjs 的办证指引）。放最前面是为了让这条硬性前提
+    // 在任何耗时步骤（stage Agent Core / prepare embedding model 等，实测数分钟）之前拦下，
+    // 不要让人先烧掉几分钟才撞见"证书都没有"。
+    {
+      label: 'verify Developer ID signing identity',
+      command: process.execPath,
+      args: [join(repoRoot, 'scripts', 'check-signing-identity.mjs')],
+    },
+    ...createSharedPrepareSteps('darwin'),
     {
       label: `package macOS arm64 DMG + ZIP（${notarize ? '签名 + 公证' : '仅签名'}）`,
       command: bin('electron-builder'),
@@ -199,7 +230,7 @@ export function createPackageRcSteps({
     {
       label: 'audit packaged app boundary',
       command: process.execPath,
-      args: [join(repoRoot, 'scripts', 'audit-packaged-app-boundary.mjs')],
+      args: [join(repoRoot, 'scripts', 'audit-packaged-app-boundary.mjs'), '--platform', 'darwin'],
     },
     {
       // 第二道防线（打包后，仅 mac 档）：复用 smoke-memory 的既有通道，但把 electron 二进制换成
@@ -246,15 +277,36 @@ export function createPackageRcSteps({
   ]
 }
 
-export function runPackageRc({ cwd = repoRoot, stdio = 'inherit', notarize = false } = {}) {
+export function createPackageRcSteps({
+  clientVersion = resolveClientBuildVersion({ root: repoRoot }),
+  notarize = false,
+  platform = process.platform,
+} = {}) {
+  if (platform === 'win32') return createWindowsSteps(clientVersion)
+  if (platform === 'darwin') return createMacSteps({ clientVersion, notarize })
+  throw new Error(`不支持的打包目标平台：${platform}（当前只发 darwin/arm64 与 win32/x64）`)
+}
+
+export function runPackageRc({
+  cwd = repoRoot,
+  stdio = 'inherit',
+  notarize = false,
+  platform = process.platform,
+  env = process.env,
+} = {}) {
+  // Windows 档没有「公证」这一挡可以挂钩凭证检查，而语料 token 缺失是构建期静默降质
+  //（烧进产物的是空串，App 照常启动、只是写作永远不注入真人范例）。所以 win 无条件检查。
+  if (platform === 'win32') assertCorpusCredentials(env)
   if (notarize) {
-    assertNotarizeCredentials()
-    assertCorpusCredentials()
+    assertNotarizeCredentials(env)
+    assertCorpusCredentials(env)
   }
   const clientVersion = resolveClientBuildVersion({ root: cwd })
-  for (const step of createPackageRcSteps({ clientVersion, notarize })) {
-    const env = resolveStepEnv(step)
-    execFileSync(step.command, step.args, { cwd, stdio, ...(env ? { env } : {}) })
+  for (const step of createPackageRcSteps({ clientVersion, notarize, platform })) {
+    // resolveStepEnv 是叠加层：丢了它，smoke packaged app 拿不到 NARRACAT_SMOKE_ELECTRON_BIN，
+    // 会静默回落 dev 态且输出与真产物逐字相同（PR #6 修的正是这类假绿）。
+    const stepEnv = resolveStepEnv(step, env)
+    execFileSync(step.command, step.args, { cwd, stdio, ...(stepEnv ? { env: stepEnv } : {}) })
   }
 }
 
@@ -263,5 +315,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   // 会污染 import 本模块做单测的进程。runPackageRc 内的 assertNotarizeCredentials /
   // assertCorpusCredentials 默认读 process.env，必须先加载完凭证文件再调用。
   loadEnvFiles()
-  runPackageRc({ notarize: process.argv.includes('--notarize') })
+  const platformIndex = process.argv.indexOf('--platform')
+  if (platformIndex !== -1) {
+    const value = process.argv[platformIndex + 1]
+    if (!value || value.startsWith('--')) {
+      throw new Error('--platform 缺少取值（用法：--platform darwin|win32）')
+    }
+  }
+  runPackageRc({
+    notarize: process.argv.includes('--notarize'),
+    platform: platformIndex === -1 ? process.platform : process.argv[platformIndex + 1],
+  })
 }
