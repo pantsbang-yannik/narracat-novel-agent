@@ -4,13 +4,23 @@
 
 ## Current Branch
 
-`main`（= `c999265`，**已 push**）。社区第二批三个 PR（#18/#19/#20）合并，对应 issue #14/#16/#17 全部关闭、#15 拆分归位后 close。引擎 **4.0.172**。仓库已合一，「公开镜像仓 + 定向同步」的说法自 2026-08-16 起作废——本仓即唯一开发仓。
+`main`（= `4699fb2`，**已 push**）。社区第三批：PR #13（#5 刀 1，custom 渠道 OpenAI 协议）合并。此前社区第二批三个 PR（#18/#19/#20）合并，对应 issue #14/#16/#17 全部关闭、#15 拆分归位后 close。引擎 **4.0.172**（本次未动引擎）。仓库已合一，「公开镜像仓 + 定向同步」的说法自 2026-08-16 起作废——本仓即唯一开发仓。
 
 ## Current Phase
 
 主线 `main`。产品北极星 = ADR-0030「账房归我们 / 花归用户 / 尺归读者」；产品方向 2026-07-11 定案两大模块「用户编辑 + 可配置底座」。**正文编辑器主战役已收官**（PR #443 合并 main，ADR-0031，引擎 4.0.91，产品主人真机验收通过）；写作质量「脱胎换骨」主线阶段性收刀（arc 速度靶 PR #441 / 获得引擎四刀 PR #442 均已合并）。ADR 已扩至 **0035**。
 
 产品路线以下方 **Next（产品路线图 · 2026-07-12 统筹版）** 为准：四条泳道 = A 花的所有权（用户编辑）/ B 花的表达权（可配置底座）/ C 尺（评价与验证）/ D 账房（记忆与资产底座）。战略层以 `docs/COMPASS.md` 为准，执行入口 `/next-issue`。
+
+**2026-08-18（社区第三批：custom 渠道支持 OpenAI 协议，PR #13 = #5 刀 1，`4699fb2`）**：@zfengChen 的提案 #5 拆三刀后的第一刀落地。custom 渠道新增 `wire` 字段（`anthropic` 默认 / `openai`），主链走 pi-ai 原生 `openai-completions`（零新依赖），模型清单双头拉取（`Bearer {base}/models` vs `x-api-key {base}/v1/models`），wire 贯通配置归一化 / 验证快照 / 会话指纹。**默认行为零变化**——`normalizeWire` 把 openai 锁死在 custom 渠道，内置四家含手改配置文件一律回落 anthropic，错配拦在入口而非事后补救。
+
+**两轮 review。第一轮抓到的阻断项是这条记录的重点**：切协议按钮**实质点不动，还会把磁盘上已落盘的 wire 静默改回去**。根因在 `src/lib/settings-config.ts` 的草稿保护——`toDisplay` 把 providers 整个换回本地草稿（原为防「用户正在打字的 baseUrl 被落盘结果吃掉」），而 `onModelWireChange` 从不更新草稿里的 wire，这层保护就变成了回滚；紧接着 `mergeProviderDraft` 在「测试连接」时把整个 provider 对象从草稿写回 persisted，把磁盘上正确的 openai 也覆盖掉。**本质是把离散的即时落盘字段（wire，语义同「设为主力」）塞进了为打字输入设计的保护圈**。采纳修法 2（字段级保护：只回护 `baseUrl`），一次修掉两处。**贡献者的根因交代比修复本身值钱**：这刀是从他 fork 的完整实现里提取的，原版有 `displayProviders:'saved'` 防这类回滚，提取时被当成动态渠道的附属品剔掉了——**从大实现里切片时被剥离的保护件，是回归的高发区**，以后审同类提取式 PR 要专门过一遍。
+
+**维护者复审不采信贡献者的测试报告，全部独立复跑**：`typecheck` / `check:design` / `check:architecture` 全绿；全量 **3000 pass / 0 fail across 296 files**；**合并最新 main 后复跑 3008 pass / 0 fail across 297 files**（零冲突）；阻断项两步**另写一份复现脚本**（不复用贡献者用例）验证 3 pass。**额外验的两项是复审真正的增量**：①**存量用户升级路径**——`wire` 成了必填字段，legacy 兼容一旦写错，所有老用户升级后验证态会被清空、被迫重新测试连接；拿本机真实 `config.json`（无 wire 字段、两条已验证 deepseek 条目）跑新 `normalizeAppConfig`，**快照零清空、主力槽仍 verified**。②**指纹加 wire 的迁移成本**——一度担心会让存量用户旧对话一次性失配，查下来不成立：`sdkSessionsByThread` 是纯内存 Map（`run-manager.ts:194`），跨重启本就不 resume，升级必然重启，零成本。
+
+**刀 2 未做的用户可见后果必须在刀 1 交代**（这是审核时提的第二条必改）：四条直连 `@anthropic-ai/sdk` 的路径在 openai wire 下全挂——`character-chat-runner`（取**主力槽**，故只要 custom 设成主力，角色聊天就中招）/ `character-chat-profiler` / `packs/pack-compile` / `packs/card-rewrite`。**最坑的是误导性**：`testProviderConnection` 走 `createPiModel`、openai wire 已接通，用户会看到**测试连接绿灯**，转头去唠个嗑撞一个 Anthropic SDK 抛的 404 天书——绿灯之后功能挂掉，比一开始就报错更伤。选了成本近零的解法：维护者定稿的渠道配置提示文案里，把前缀缓存费用警示与功能覆盖缺口一起写清，UI 测试断言「只覆盖写作主链」关键词防将来改文案把告知改丢。
+
+**已知项与待办**：`maxTokens: 32_000` 沿用 anthropic wire 的调优值，openai wire 下部分兼容网关/小模型可能直接 400，留待真实反馈后考虑按 wire 分设；baseUrl 不带 `/v1` 时 openai 分支不自动补，静默 404 回落内置目录（placeholder 与 description 均有提示，可接受）。**两项维护者未验并已如实标注**：openai wire 真连（无 OpenAI 兼容端点，依赖贡献者的 E2E 证据——opencode.ai 网关、模型清单 + 主链完整往返，是可复现描述而非「我机器上好了」）；协议按钮与须知文案在 Electron 里的真机排版观感（结构测试与 `check:design` 均绿，留 dogfood 时自查）。**顺带立 #24**：`check:design` 在 Windows 上恒红（`brand-illustrations.ts violates brand asset guard`），贡献者验证在 main 裸跑同样红、与本 PR 无关；怀疑守卫的字符串子串断言撞上 CRLF 行尾（本仓无 `.gitattributes`），**一个在某平台恒红的守卫比没有守卫更糟**——会训练出「这条红的可以跳过」的习惯，且把 Windows 贡献者挡在「无法自证改动干净」的位置上。
 
 **2026-08-18（社区第二批：外部报告三条修复全部合并，PR #18/#19/#20）**：报告人 @Akimixu-19897 一天内提三条（#14/#15/#16），逐条读代码定位后**结论与报告不完全一致**，是本轮最值得记的部分。
 
