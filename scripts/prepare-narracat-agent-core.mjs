@@ -4,7 +4,7 @@ import { cp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { npmBin } from './npm-bin.mjs'
+import { npmCommand } from './npm-command.mjs'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(scriptDir, '..')
@@ -121,8 +121,9 @@ async function hasMcpServerBuild(agentCorePath) {
 
 async function runNpmCommand({ args, cwd, label }) {
   console.log(`${label}：npm ${args.join(' ')} (${cwd})`)
-  // 必须走 npmBin()：Windows 上 npm 是 npm.cmd，execFile 不经 shell，裸 'npm' 会 ENOENT。
-  await execFileAsync(npmBin(), args, {
+  // 必须走 npmCommand()：Windows 上 npm 是 npm.cmd，execFile 启动不了 .cmd（见该模块注释）。
+  const npm = npmCommand(args)
+  await execFileAsync(npm.command, npm.args, {
     cwd,
     encoding: 'utf-8',
     maxBuffer: 1024 * 1024 * 10,

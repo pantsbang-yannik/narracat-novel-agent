@@ -8,7 +8,7 @@ import { cp, mkdir, readdir, readFile, readlink, rm, stat, writeFile } from 'nod
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
-import { npmBin } from './npm-bin.mjs'
+import { npmCommand } from './npm-command.mjs'
 
 const execFileAsync = promisify(execFile)
 const scriptDir = dirname(fileURLToPath(import.meta.url))
@@ -323,8 +323,9 @@ async function pruneStagedMcpServerDevDependencies(destination) {
   const manifestPath = join(mcpRoot, 'package.json')
   if (!(await pathExists(manifestPath))) return
 
-  // 必须走 npmBin()：Windows 上 npm 是 npm.cmd，execFile 不经 shell，裸 'npm' 会 ENOENT。
-  await execFileAsync(npmBin(), ['prune', '--omit=dev', '--package-lock=false'], {
+  // 必须走 npmCommand()：Windows 上 npm 是 npm.cmd，execFile 启动不了 .cmd（见该模块注释）。
+  const npm = npmCommand(['prune', '--omit=dev', '--package-lock=false'])
+  await execFileAsync(npm.command, npm.args, {
     cwd: mcpRoot,
     encoding: 'utf-8',
     maxBuffer: 1024 * 1024 * 10,
