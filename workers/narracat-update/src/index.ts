@@ -14,7 +14,7 @@
 const RELEASE_REPO = 'yannikzz/narracat-novel-agent'
 const RELEASES_BASE = `https://github.com/${RELEASE_REPO}/releases`
 
-/** 允许的平台目录。Windows 战役落位时无需改这里。 */
+/** 允许的平台目录（mac arm64 与 win x64 两个，不做 mac Intel、不做 Windows ARM）。 */
 const PLATFORM_DIRS = new Set(['mac-arm64', 'win-x64'])
 
 /** electron-updater 的清单文件名（不带版本号，恒取最新 release）。 */
@@ -64,14 +64,17 @@ export function resolveUpstreamUrl(pathname: string): string | null {
  * 地址不带版本号，指向哪一版由 GitHub 的 latest 标记决定：先取清单读出版本号，
  * 再转发到该版本的产物。代价是每次多一次上游往返，换来链接永不失效。
  *
- * 白名单精确匹配：只有登记过的地址才认。Windows 战役落位时在这里加一行，
- * 顺带确认那时的产物扩展名（不提前臆造）。
+ * 白名单精确匹配：只有登记过的地址才认，免得凭空拼出不存在的产物名。
  *
- * **这里的 key 与 `scripts/update-feed.mjs` 的 MAC_LATEST_DOWNLOAD_FILE 是同一件事**，
- * 本 Worker 独立部署、不 import 本仓代码，只能靠这条注释互指：改一边必须同时改另一边。
+ * **这里的 key 与 `scripts/update-feed.mjs` 的 MAC_LATEST_DOWNLOAD_FILE /
+ * WIN_LATEST_DOWNLOAD_FILE 是同一件事**，本 Worker 独立部署、不 import 本仓代码，
+ * 只能靠这条注释互指：改一边必须同时改另一边（那边有一条断言扫本文件源码兜底）。
  */
 const DOWNLOAD_ALIASES: Record<string, DownloadAlias> = {
   '/mac-arm64/latest.dmg': { manifestName: 'latest-mac.yml', assetSuffix: '-mac-arm64.dmg' },
+  // Windows 的更新载体就是 NSIS 安装器本身（不像 mac 另有 zip），所以永久链接直指 exe。
+  // key 与 scripts/update-feed.mjs 的 WIN_LATEST_DOWNLOAD_FILE 是同一件事，改一边必须同改另一边。
+  '/win-x64/latest.exe': { manifestName: 'latest.yml', assetSuffix: '-win-x64.exe' },
 }
 
 export type DownloadAlias = {

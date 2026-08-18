@@ -88,13 +88,44 @@ describe('resolveDownloadAlias', () => {
   // 别名是白名单精确匹配：没登记的一律不认，免得凭空拼出不存在的产物名。
   test('未登记的别名拒绝', () => {
     expect(resolveDownloadAlias('/mac-arm64/latest.zip')).toBeNull()
-    expect(resolveDownloadAlias('/win-x64/latest.exe')).toBeNull()
     expect(resolveDownloadAlias('/mac-arm64/latest.dmg/extra')).toBeNull()
     expect(resolveDownloadAlias('/mac-arm64/%2E%2E/latest.dmg')).toBeNull()
   })
 
   test('别名不会被主路径当成产物名解析', () => {
     expect(resolveUpstreamUrl('/mac-arm64/latest.dmg')).toBeNull()
+  })
+})
+
+describe('Windows 永久下载链接（Windows 战役 2026-08-16）', () => {
+  test('/win-x64/latest.exe 走清单定版本再转发', () => {
+    const alias = resolveDownloadAlias('/win-x64/latest.exe')
+    expect(alias).toEqual({ manifestName: 'latest.yml', assetSuffix: '-win-x64.exe' })
+  })
+
+  test('按清单里的版本号拼出该版本的 exe', () => {
+    const alias = resolveDownloadAlias('/win-x64/latest.exe')!
+    expect(buildAliasAssetUrl(alias, '0.1.1880')).toBe(
+      'https://github.com/yannikzz/narracat-novel-agent/releases/download/v0.1.1880/NarraCat-0.1.1880-win-x64.exe',
+    )
+  })
+
+  test('未登记的 Windows 别名一律不认（白名单精确匹配）', () => {
+    expect(resolveDownloadAlias('/win-x64/latest.msi')).toBeNull()
+    expect(resolveDownloadAlias('/win-x64/latest.zip')).toBeNull()
+  })
+
+  // 自动更新链（清单 + 产物翻译）本来就已支持 win-x64，这里是回归确认，不是新功能。
+  test('Windows 自动更新清单与产物本来就能翻译', () => {
+    expect(resolveUpstreamUrl('/win-x64/latest.yml')).toBe(
+      'https://github.com/yannikzz/narracat-novel-agent/releases/latest/download/latest.yml',
+    )
+    expect(resolveUpstreamUrl('/win-x64/NarraCat-0.1.1880-win-x64.exe')).toBe(
+      'https://github.com/yannikzz/narracat-novel-agent/releases/download/v0.1.1880/NarraCat-0.1.1880-win-x64.exe',
+    )
+    expect(resolveUpstreamUrl('/win-x64/NarraCat-0.1.1880-win-x64.exe.blockmap')).toBe(
+      'https://github.com/yannikzz/narracat-novel-agent/releases/download/v0.1.1880/NarraCat-0.1.1880-win-x64.exe.blockmap',
+    )
   })
 })
 
