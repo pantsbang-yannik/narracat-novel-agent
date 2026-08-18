@@ -1,14 +1,19 @@
 import { describe, expect, test } from 'bun:test'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import {
+  assertPackagedLocalesPresent,
   auditAsarEntries,
   auditPackagedResourceEntries,
   classifyAsarEntry,
   classifyPackagedResourceEntry,
   resolvePackagedAppPath,
   resolvePackagedAsarPath,
+  resolvePackagedLayout,
 } from './audit-packaged-app-boundary.mjs'
+import { resolveNativeTarget } from './stage-narracat-agent-core.mjs'
 
 describe('packaged app.asar boundary audit', () => {
   test('allows only runtime top-level entries', () => {
@@ -143,5 +148,61 @@ describe('packaged app.asar boundary audit', () => {
       join('/repo', 'dist', 'custom', 'NarraCat.app', 'Contents', 'Resources', 'app.asar'),
     )
     expect(resolvePackagedAsarPath(['--asar=dist/app.asar'], '/repo')).toBe(join('/repo', 'dist', 'app.asar'))
+  })
+})
+
+describe('打包布局按平台解析（Windows 战役）', () => {
+  // 期望值全部照实测的 mac 产物写死（2026-08-18，dist/mac-arm64/NarraCat.app）：
+  // Contents/Resources/{en,zh_CN}.lproj 是**空目录**——那是 macOS 的语言声明标记，
+  // 拿它当「locale 就绪」的判据会永远误判为通过。真正的 locale.pak 在 Electron
+  // Framework 内部，且用 Apple 的下划线惯例（zh_CN / en），与 package.json 的
+  // mac electronLanguages 精确对应。
+  test('mac 与 win 各自的 app 路径 / 资源目录 / locale 目录', () => {
+    expect(resolvePackagedLayout('darwin')).toEqual({
+      appPath: join('dist', 'mac-arm64', 'NarraCat.app'),
+      resourcesDir: join('Contents', 'Resources'),
+      localesDir: join('Contents', 'Frameworks', 'Electron Framework.framework', 'Resources'),
+      localeFiles: [join('zh_CN.lproj', 'locale.pak'), join('en.lproj', 'locale.pak')],
+    })
+    expect(resolvePackagedLayout('win32')).toEqual({
+      appPath: join('dist', 'win-unpacked'),
+      resourcesDir: 'resources',
+      localesDir: 'locales',
+      localeFiles: ['zh-CN.pak', 'en-US.pak'],
+    })
+  })
+
+  test('不支持的平台 fail-loud', () => {
+    expect(() => resolvePackagedLayout('linux')).toThrow(/不支持的打包目标平台/)
+  })
+
+  test('locale 文件缺失时 fail-loud（issue #3 的真守卫）', async () => {
+    const layout = resolvePackagedLayout('win32')
+    const appPath = await mkdtemp(join(tmpdir(), 'narracat-audit-win-'))
+    try {
+      await mkdir(join(appPath, 'locales'), { recursive: true })
+      // 空 locales 目录 = issue #3 的现场
+      await expect(assertPackagedLocalesPresent(appPath, layout)).rejects.toThrow(/locale/)
+      await writeFile(join(appPath, 'locales', 'zh-CN.pak'), 'x')
+      await expect(assertPackagedLocalesPresent(appPath, layout)).rejects.toThrow(/en-US\.pak/)
+      await writeFile(join(appPath, 'locales', 'en-US.pak'), 'x')
+      await assertPackagedLocalesPresent(appPath, layout)
+    } finally {
+      await rm(appPath, { recursive: true, force: true })
+    }
+  })
+
+  test('资源分类按目标平台判定外来平台二进制', () => {
+    const base = 'NarraCatAgentCore/mcp-server/node_modules/onnxruntime-node/bin/napi-v3'
+    const winTarget = resolveNativeTarget('win32')
+    expect(classifyPackagedResourceEntry(`${base}/win32/x64/onnxruntime_binding.node`, winTarget).ok).toBe(true)
+    expect(classifyPackagedResourceEntry(`${base}/darwin/arm64/onnxruntime_binding.node`, winTarget).ok).toBe(false)
+  })
+
+  test('resolvePackagedAppPath / AsarPath 按 --platform 给出对应布局', () => {
+    expect(resolvePackagedAppPath(['--platform', 'win32'], '/repo')).toBe(join('/repo', 'dist', 'win-unpacked'))
+    expect(resolvePackagedAsarPath(['--platform', 'win32'], '/repo')).toBe(
+      join('/repo', 'dist', 'win-unpacked', 'resources', 'app.asar'),
+    )
   })
 })
