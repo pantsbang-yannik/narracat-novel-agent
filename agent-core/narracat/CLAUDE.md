@@ -108,7 +108,7 @@ App 层「Agent 档案」页让作者在设置页覆盖官方 Agent 的部分正
 `id` 一旦发布（进了 `prose-blocks.lock.json` 并随版本发出），**不得改名**——作者的 override 是按 id 存的，改名等于让存量 override 静默孤儿化。删除一个块必须同步：
 
 1. 从 `prose-blocks.lock.json` 移除该条目；
-2. bump 引擎版本（四步 bump，见下节）。
+2. bump 引擎版本（三步 bump，见下节）。
 
 `scripts/check-prose-blocks.mjs`（本地串进 `check:architecture`；CI 侧 `.github/workflows/agent-core-ci.yml` 的 `agent-core-prose-blocks-guard` job 直接跑同一条命令）机械校验：标记成对闭合、id 为 kebab-case、id 全局唯一、id 集合与 lock 文件双向一致。**新增或修改块后必须跑 `node scripts/check-prose-blocks.mjs`**，本地失败等价 CI 会红。
 
@@ -159,7 +159,11 @@ CI workflow 住在**仓库根** `.github/workflows/`（不在本目录的 `.gith
 
 当前基准：**4.0.172**（narracat.manifest.json、mcp-server/package.json，以及 App 层 `agent-core/narracat-agent-core.lock.json` 的 version 字段均保持与此一致）。
 
-**bump 流程**（每次非 trivial 提交）：(1) CHANGELOG.md 顶部加新版本段；(2) 更新本节「当前基准」；(3) 同步 narracat.manifest.json 与 mcp-server/package.json 的 version 字段；(4) 同步 App 层版本闸门 `agent-core/narracat-agent-core.lock.json` 的 `version`——漏改会导致 App 启动报「Agent Core version 应为 X，实际为 Y」、且 `bun --no-cache run verify:narracat-agent-core` 失败。版本历史归 CHANGELOG.md，不在本文件累积。
+**bump 流程**（每次非 trivial 提交，三处版本号 + 本节基准必须逐字一致）：(1) 更新本节「当前基准」；(2) 同步 narracat.manifest.json 与 mcp-server/package.json 的 version 字段；(3) 同步 App 层版本闸门 `agent-core/narracat-agent-core.lock.json` 的 `version`——漏改会导致 App 启动报「Agent Core version 应为 X，实际为 Y」、且 `bun --no-cache run verify:narracat-agent-core` 失败。
+
+**变更说明写进 commit message，不要写 CHANGELOG.md。** 本仓 `.gitignore` 把 `agent-core/narracat/CHANGELOG.md` 归为过程私产（`scripts/check-public-boundary.test.mjs` 的 `FORBIDDEN_TRACKED_PREFIXES` 硬校验它不得被 tracked，根 `CONTEXT.md` 的分发资产分级把它列为「研发痕迹」），**写了也不进版本库**。这个坑踩起来很隐蔽：编辑成功、文件确实改了、`git add -A` 也不报错（git 静默跳过 ignored 文件），只是永远不进 commit；而且它是未跟踪文件，`git checkout` 换分支时原地不动，会把 A 分支写的段带到 B 分支，造出两段同号记录。本地那份留作自己查阅无妨，但它不是交付物——**入仓的变更记录 = commit message（细节）+ `docs/agents/progress.md`（阶段）**。
+
+多条 agent-core PR 并行时：各自从 main 拉出会 bump 到同一个 z，四个版本文件在同一行冲突（`git merge-tree` 可预先确认）。先落一条，另一条 rebase 后重新定 landing 版本；版本号只需单调递增，跳号无害。
 
 ## Agent skills
 

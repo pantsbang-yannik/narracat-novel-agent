@@ -48,6 +48,6 @@ Review 第一关（判据见 CONTRIBUTING.md「PR 会被怎样审」）。三问
 - **兼容性策略**：
   - [ ] 完全向后兼容（仅新增可选字段）
   - [ ] 老数据需迁移（已提供 migration 脚本 / 启动钩子自动迁移）
-  - [ ] Breaking change（已在 CHANGELOG 标注 / 升级注意事项）
+  - [ ] Breaking change（已在本 PR 描述写明升级注意事项）
 - **客户端验证**：
   - <!-- 是否在 dogfood 项目上验证过 / 测试覆盖哪些场景 -->
