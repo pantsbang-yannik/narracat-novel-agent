@@ -6,7 +6,6 @@ import { resolveClientBuildVersion } from './client-build-version.mjs'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(scriptDir, '..')
-const binExt = process.platform === 'win32' ? '.cmd' : ''
 const agentCorePath = join(repoRoot, 'agent-core', 'narracat')
 
 // bun 不把 .env 传给 node 子进程，而 package:release 正是 bun run → node。
@@ -38,8 +37,27 @@ export function loadEnvFiles(root = repoRoot) {
   }
 }
 
-function bin(name) {
-  return join(repoRoot, 'node_modules', '.bin', `${name}${binExt}`)
+/**
+ * 用当前 Node 直接跑依赖包的 JS 入口，不走 node_modules/.bin 的包装器。
+ *
+ * 为什么绕开 .bin：Windows 上那里放的是 electron-vite.cmd 这类批处理文件，而
+ * Node 官方文档写死「.bat/.cmd 不能用 child_process.execFile 启动」——execFileSync
+ * 传 .cmd 路径直接 spawnSync EINVAL（2026-08-18 Windows 战役 CI 实撞）。
+ * 包入口本身是普通 .js，用 process.execPath 跑它跨平台完全一致：不需要 shell、
+ * 不需要 cmd.exe 转义、路径含空格也不受影响（参数走数组，不拼命令行）。
+ *
+ * BIN_ENTRIES 的值取自各包 package.json 的 bin 字段，被测试钉住——升级依赖时
+ * 入口路径若变了，测试会红，而不是等到打包当场炸。
+ */
+export const BIN_ENTRIES = {
+  'electron-vite': join('electron-vite', 'bin', 'electron-vite.js'),
+  'electron-builder': join('electron-builder', 'cli.js'),
+}
+
+function binStep(name, args) {
+  const entry = BIN_ENTRIES[name]
+  if (!entry) throw new Error(`未登记的依赖入口：${name}（请在 BIN_ENTRIES 补上它 package.json 的 bin 路径）`)
+  return { command: process.execPath, args: [join(repoRoot, 'node_modules', entry), ...args] }
 }
 
 export const NOTARIZE_ENV_VARS = ['APPLE_API_KEY', 'APPLE_API_KEY_ID', 'APPLE_API_ISSUER']
@@ -177,8 +195,7 @@ function createSharedPrepareSteps(platform) {
     },
     {
       label: 'build Electron bundles',
-      command: bin('electron-vite'),
-      args: ['build'],
+      ...binStep('electron-vite', ['build']),
     },
   ]
 }
@@ -191,8 +208,7 @@ function createWindowsSteps(clientVersion) {
       // 未签名档：SignPath 的硬条款是「必须已以待签名的形态发布过」，所以第一版就是要发未签名的。
       // 用户首次运行会撞 SmartScreen「Windows 已保护你的电脑」，下载页文案须交代。
       label: 'package Windows x64 NSIS 安装包（未签名）',
-      command: bin('electron-builder'),
-      args: ['--win', 'nsis', '--x64', `--config.extraMetadata.version=${clientVersion}`],
+      ...binStep('electron-builder', ['--win', 'nsis', '--x64', `--config.extraMetadata.version=${clientVersion}`]),
     },
     {
       label: 'audit packaged app boundary',
@@ -217,15 +233,14 @@ function createMacSteps({ clientVersion, notarize }) {
     ...createSharedPrepareSteps('darwin'),
     {
       label: `package macOS arm64 DMG + ZIP（${notarize ? '签名 + 公证' : '仅签名'}）`,
-      command: bin('electron-builder'),
-      args: [
+      ...binStep('electron-builder', [
         '--mac',
         'dmg',
         'zip',
         '--arm64',
         `--config.extraMetadata.version=${clientVersion}`,
         `--config.mac.notarize=${notarize}`,
-      ],
+      ]),
     },
     {
       label: 'audit packaged app boundary',

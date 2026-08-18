@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { realpathSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -9,6 +9,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   assertCorpusCredentials,
   assertNotarizeCredentials,
+  BIN_ENTRIES,
   createPackageRcSteps,
   findMissingCorpusEnv,
   findMissingNotarizeEnv,
@@ -19,6 +20,7 @@ import {
 import { DEFAULT_APP_PATH } from './verify-signed-artifact.mjs'
 
 const packageRcModuleUrl = pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), 'package-rc.mjs')).href
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 /**
  * 在临时目录（永远不是仓库根目录）里演练 package-rc.mjs 真实的 loadEnvFiles()。
@@ -75,6 +77,29 @@ describe('RC package script', () => {
     expect(steps[10].args.some((arg) => arg.endsWith('/scripts/audit-packaged-app-boundary.mjs'))).toBe(true)
     expect(steps[12].args.some((arg) => arg.endsWith('/scripts/verify-signed-artifact.mjs'))).toBe(true)
     expect(steps[12].args).not.toContain('--notarized')
+  })
+})
+
+describe('依赖入口解析（跨平台）', () => {
+  // Windows 上 node_modules/.bin 放的是 .cmd 批处理，而 Node 官方文档写死
+  //「.bat/.cmd 不能用 execFile 启动」——直接 spawnSync EINVAL。改用 node 跑包的
+  // JS 入口后跨平台一致，但入口路径成了硬依赖：升级依赖时它变了必须当场红。
+  test('登记的入口与各包 package.json 的 bin 字段一致，且文件真实存在', () => {
+    for (const [name, entry] of Object.entries(BIN_ENTRIES)) {
+      const pkg = JSON.parse(readFileSync(join(repoRoot, 'node_modules', name, 'package.json'), 'utf8'))
+      const declared = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin[name]
+      expect(join(name, ...declared.replace(/^\.?\//, '').split('/'))).toBe(entry)
+      expect(existsSync(join(repoRoot, 'node_modules', entry))).toBe(true)
+    }
+  })
+
+  test('打包步骤一律用 node 跑入口，不出现 node_modules/.bin', () => {
+    for (const platform of ['darwin', 'win32']) {
+      for (const step of createPackageRcSteps({ clientVersion: '0.1.9999', platform })) {
+        expect(step.command).not.toContain(`.bin`)
+        expect(step.args.some((arg) => String(arg).includes('.bin'))).toBe(false)
+      }
+    }
   })
 })
 
