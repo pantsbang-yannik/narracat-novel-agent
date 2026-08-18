@@ -208,7 +208,18 @@ function createWindowsSteps(clientVersion) {
       // 未签名档：SignPath 的硬条款是「必须已以待签名的形态发布过」，所以第一版就是要发未签名的。
       // 用户首次运行会撞 SmartScreen「Windows 已保护你的电脑」，下载页文案须交代。
       label: 'package Windows x64 NSIS 安装包（未签名）',
-      ...binStep('electron-builder', ['--win', 'nsis', '--x64', `--config.extraMetadata.version=${clientVersion}`]),
+      ...binStep('electron-builder', [
+        '--win',
+        'nsis',
+        '--x64',
+        `--config.extraMetadata.version=${clientVersion}`,
+        // 关掉 electron-builder 自带的 npmRebuild：它会拉 node-gyp 把 better-sqlite3
+        // 重编成 Electron ABI，在 Windows CI 上直接 node-gyp failed to rebuild。
+        // 而这次重编本来就是多余的——13.0.2 是 N-API，prebuilds/win32-x64.node
+        // 单份二进制 node 与 Electron 通吃（同 ensure-electron-native.mjs 的判定）。
+        // 只在 win 档关：mac 链刚过验收，那边照旧 rebuild，一个字不动。
+        '--config.npmRebuild=false',
+      ]),
     },
     {
       label: 'audit packaged app boundary',

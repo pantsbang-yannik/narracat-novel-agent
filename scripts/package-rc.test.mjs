@@ -121,6 +121,18 @@ describe('Windows 打包档（Windows 战役 2026-08-16）', () => {
     expect(build.args).toContain('--config.extraMetadata.version=0.1.1880')
   })
 
+  // better-sqlite3 13 是 N-API，prebuilds/win32-x64.node 通吃 node 与 Electron，
+  // 让 electron-builder 拉 node-gyp 重编纯属多余，且在 Windows CI 上会直接失败。
+  test('关掉 npmRebuild（mac 档不动）', () => {
+    const build = winSteps().find((step) => step.label.includes('package Windows'))
+    expect(build.args).toContain('--config.npmRebuild=false')
+
+    const macBuild = createPackageRcSteps({ clientVersion: '0.1.1880', platform: 'darwin' }).find((step) =>
+      step.label.includes('package macOS'),
+    )
+    expect(macBuild.args.some((arg) => String(arg).includes('npmRebuild'))).toBe(false)
+  })
+
   test('stage 与 audit 都收到 --platform win32（否则会裁光 win 二进制 / 找错产物目录）', () => {
     const steps = winSteps()
     const stage = steps.find((step) => step.label.includes('stage NarraCat Agent Core'))
