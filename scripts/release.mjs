@@ -18,22 +18,38 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parse as parseYaml } from 'yaml'
-import { macDownloadUrl, macFeedUrl, RELEASE_REPO, releaseAssetFileNames, releaseTag } from './update-feed.mjs'
+import {
+  macDownloadUrl,
+  macFeedUrl,
+  RELEASE_REPO,
+  releaseAssetFileNames,
+  releaseTag,
+  winDownloadUrl,
+  winFeedUrl,
+  winReleaseAssetFileNames,
+} from './update-feed.mjs'
 import { resolveClientBuildVersion } from './client-build-version.mjs'
 import { loadEnvFiles, runPackageRc } from './package-rc.mjs'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(scriptDir, '..')
 
-export function createReleasePlan({ clientVersion, distDir = join(repoRoot, 'dist') }) {
+export function createReleasePlan({ clientVersion, distDir = join(repoRoot, 'dist'), winDir }) {
   return {
     repo: RELEASE_REPO,
     tag: releaseTag(clientVersion),
-    title: `NarraCat ${clientVersion}（内测版）`,
+    // 决策 8a（2026-08-16）：开源之后「内部测试」概念已不成立，对外物料不再带内测措辞。
+    // 急刹车 / 软过期机制原样保留、只是不用。
+    title: `NarraCat ${clientVersion}`,
     // 不勾 Pre-release：GitHub 的 releases/latest 不含预发布版，勾了本 Worker
-    // 就找不到最新版，整条自动更新链断掉。「内测」二字放标题表达。
+    // 就找不到最新版，整条自动更新链断掉。
     prerelease: false,
-    assets: releaseAssetFileNames(clientVersion).map((name) => join(distDir, name)),
+    assets: [
+      ...releaseAssetFileNames(clientVersion).map((name) => join(distDir, name)),
+      // winDir 来自 `--with-win <目录>`：CI 出的三件 Windows 产物下载到本地后传进来，
+      // 与 mac 五件进同一个 Release（客户端按平台各取所需）。不传则本次只发 mac。
+      ...(winDir ? winReleaseAssetFileNames(clientVersion).map((name) => join(winDir, name)) : []),
+    ],
   }
 }
 
@@ -102,21 +118,28 @@ export function assertArtifactsExist(assets) {
  * electron-builder 这次没重写清单（`build.publish` 被误删、target 配置改动等），一份
  * **陈旧清单**会被原样传上生产——全流程 exit 0，确认闸照常打印新版本号，看起来完全正常。
  */
-export function assertManifestMatchesVersion({ manifestContent, clientVersion, zipFileName }) {
+export function assertManifestMatchesVersion({
+  manifestContent,
+  clientVersion,
+  assetFileName,
+  // 两平台共用本函数：mac 的清单叫 latest-mac.yml、win 的叫 latest.yml。
+  // 名字进错误信息，别让 Windows 的问题报成「latest-mac.yml 解析失败」指错文件。
+  manifestName = 'latest-mac.yml',
+}) {
   let manifest
   try {
     manifest = parseYaml(manifestContent)
   } catch (error) {
     throw new Error(
-      `latest-mac.yml 解析失败，内容可能损坏：${error instanceof Error ? error.message : String(error)}`,
+      `${manifestName} 解析失败，内容可能损坏：${error instanceof Error ? error.message : String(error)}`,
     )
   }
-  const zipUrls = Array.isArray(manifest?.files) ? manifest.files.map((file) => file?.url) : []
-  if (manifest?.version === clientVersion && zipUrls.includes(zipFileName)) return
+  const assetUrls = Array.isArray(manifest?.files) ? manifest.files.map((file) => file?.url) : []
+  if (manifest?.version === clientVersion && assetUrls.includes(assetFileName)) return
 
   throw new Error(
     [
-      `latest-mac.yml 与本次待发版本不符：清单里是 ${manifest?.version ?? '未知'}，本次要发 ${clientVersion}。`,
+      `${manifestName} 与本次待发版本不符：清单里是 ${manifest?.version ?? '未知'}，本次要发 ${clientVersion}。`,
       'dist/ 是累积目录，这通常意味着 electron-builder 这次没有重新生成清单——',
       '检查 package.json 的 build.publish 是否被误删、或 target 配置改动导致跳过生成。',
       '重新完整走一遍打包（不要复用旧 dist/）再发版。',
@@ -128,7 +151,20 @@ function assertManifestFreshness(plan, clientVersion) {
   const manifestFile = plan.assets.find((file) => file.endsWith('latest-mac.yml'))
   const zipFile = plan.assets.find((file) => file.endsWith('.zip'))
   const manifestContent = readFileSync(manifestFile, 'utf8')
-  assertManifestMatchesVersion({ manifestContent, clientVersion, zipFileName: zipFile.split('/').pop() })
+  assertManifestMatchesVersion({ manifestContent, clientVersion, assetFileName: zipFile.split('/').pop() })
+
+  // Windows 清单来自 CI 下载的目录，同样可能是陈旧的（下错 run、复用旧目录）——
+  // 而且它比 mac 更容易出错：mac 的 dist/ 是本次打包刚写的，win 的目录是人手动下载的。
+  // endsWith('latest.yml') 会同时命中 latest-mac.yml，故显式排除。
+  const winManifestFile = plan.assets.find((file) => file.endsWith('latest.yml') && !file.endsWith('latest-mac.yml'))
+  if (!winManifestFile) return
+  const winExe = plan.assets.find((file) => file.endsWith('-win-x64.exe'))
+  assertManifestMatchesVersion({
+    manifestContent: readFileSync(winManifestFile, 'utf8'),
+    clientVersion,
+    assetFileName: winExe.split('/').pop(),
+    manifestName: 'latest.yml',
+  })
 }
 
 async function confirm(plan, clientVersion) {
@@ -198,22 +234,33 @@ export function publishRelease(plan, { run = ghRun } = {}) {
 }
 
 function releaseNotes(plan) {
+  const version = plan.tag.replace(/^v/, '')
+  const hasWindows = plan.assets.some((file) => file.endsWith('-win-x64.exe'))
   return [
-    `NarraCat ${plan.tag.replace(/^v/, '')} 内测版。`,
+    `NarraCat ${version}。`,
     '',
     '已装旧版的用户会在启动后自动收到更新，重启即可生效。',
-    '首次安装请下载 dmg。',
+    `首次安装：macOS 下载 dmg${hasWindows ? '，Windows 下载 exe。' : '。'}`,
+    ...(hasWindows
+      ? [
+          '',
+          '⚠️ Windows 版当前尚未代码签名，首次运行会看到「Windows 已保护你的电脑」蓝色弹窗：',
+          '点「更多信息」→「仍要运行」即可。签名证书正在申请中（SignPath Foundation 开源计划）。',
+        ]
+      : []),
   ].join('\n')
 }
 
-export async function runRelease() {
+export async function runRelease({ winDir } = {}) {
   // 放在打包之前：非交互环境就别浪费几分钟签名 + 公证了。
   assertInteractive(process.stdin.isTTY)
 
   const clientVersion = resolveClientBuildVersion({ root: repoRoot })
+  // 只打 mac：Windows 包由 CI 出（SignPath 要求可验证地从源码构建），
+  // 通过 --with-win <目录> 把下载好的三件产物带进本次 Release。
   runPackageRc({ cwd: repoRoot, notarize: true })
 
-  const plan = createReleasePlan({ clientVersion })
+  const plan = createReleasePlan({ clientVersion, winDir })
   assertArtifactsExist(plan.assets)
   assertManifestFreshness(plan, clientVersion)
   await confirm(plan, clientVersion)
@@ -226,8 +273,10 @@ export async function runRelease() {
       `✅ ${clientVersion} 已发布。`,
       // 对外只发永久链接：它自动跟随 latest，发新版不必换，回退时也跟着回退。
       // 带版本号的那条只在需要钉死某一版时用（比如让某个用户复现问题）。
-      `对外分发（永久，发新版不用换）：${macDownloadUrl()}`,
+      `macOS 对外分发（永久，发新版不用换）：${macDownloadUrl()}`,
+      ...(winDir ? [`Windows 对外分发（永久）：${winDownloadUrl()}`] : []),
       `本版固定地址：${macFeedUrl()}/NarraCat-${clientVersion}-mac-arm64.dmg`,
+      ...(winDir ? [`             ${winFeedUrl()}/NarraCat-${clientVersion}-win-x64.exe`] : []),
       `Release 页：https://github.com/${plan.repo}/releases/tag/${plan.tag}`,
       '',
       '出问题要回退：打开上面的 Release 页 → 编辑上一个正常版本 → 勾选',
@@ -243,7 +292,18 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   // 漏这一步的后果是「凭证明明配好了却报缺失」，整条发布链在真机上打不通
   // （package-rc.mjs / notarize-dmg.mjs 的 CLI 入口是同款处置，见 package-rc.test.mjs 的回归测试）。
   loadEnvFiles()
-  runRelease().catch((error) => {
+  // --with-win <目录>：CI 出的 Windows 三件产物下载到哪儿了。缺值必须炸，
+  // 不能静默退化成「只发 mac」——那会让人以为 Windows 也发出去了。
+  const withWinIndex = process.argv.indexOf('--with-win')
+  if (withWinIndex !== -1) {
+    const value = process.argv[withWinIndex + 1]
+    if (!value || value.startsWith('--')) {
+      throw new Error('--with-win 缺少取值（用法：--with-win <存放 CI Windows 产物的目录>）')
+    }
+  }
+  runRelease({
+    winDir: withWinIndex === -1 ? undefined : resolve(process.argv[withWinIndex + 1]),
+  }).catch((error) => {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
     process.exit(1)
   })

@@ -10,6 +10,9 @@ import {
   macFeedUrl,
   releaseAssetFileNames,
   releaseTag,
+  winDownloadUrl,
+  winFeedUrl,
+  winReleaseAssetFileNames,
 } from './update-feed.mjs'
 
 const repoRoot = join(import.meta.dirname, '..')
@@ -81,5 +84,30 @@ describe('update feed 契约', () => {
     const source = readFileSync(join(repoRoot, 'electron/main/updater/updater-runtime.ts'), 'utf8')
     expect(source).toContain(UPDATE_FEED_BASE_URL)
     expect(source).toContain(MAC_PLATFORM_DIR)
+  })
+})
+
+describe('Windows 更新源（Windows 战役 2026-08-16）', () => {
+  test('win feed 指向 win-x64 子目录', () => {
+    expect(winFeedUrl()).toBe('https://update.narracat.com/win-x64')
+  })
+
+  test('对外永久下载链接是 latest.exe', () => {
+    expect(winDownloadUrl()).toBe('https://update.narracat.com/win-x64/latest.exe')
+  })
+
+  test('一次 Windows 发版三件缺一不可', () => {
+    expect(winReleaseAssetFileNames('0.1.1880')).toEqual([
+      'NarraCat-0.1.1880-win-x64.exe',
+      'NarraCat-0.1.1880-win-x64.exe.blockmap',
+      'latest.yml',
+    ])
+  })
+
+  // Worker 是独立部署单元、不 import 本仓代码，两处白名单是刻意的重复。
+  // 这条断言把「改一边忘了另一边 → 永久下载链接 404」变成红灯。
+  test('永久下载文件名与 Worker 的 alias 白名单一致', () => {
+    const workerSource = readFileSync(join(repoRoot, 'workers', 'narracat-update', 'src', 'index.ts'), 'utf8')
+    expect(workerSource).toContain('latest.exe')
   })
 })

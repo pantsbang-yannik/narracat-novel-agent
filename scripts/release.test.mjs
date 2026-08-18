@@ -27,10 +27,42 @@ describe('createReleasePlan', () => {
   })
 
   // 不勾 Pre-release：releases/latest 不含预发布版，勾了 Worker 就找不到最新版。
-  test('标题带内测字样但不是预发布', () => {
-    expect(plan.title).toContain('0.1.1880')
-    expect(plan.title).toContain('内测')
+  test('标题不带内测字样（决策 8a：开源之后「内部测试」概念已不成立），且不是预发布', () => {
+    expect(plan.title).toBe('NarraCat 0.1.1880')
+    expect(plan.title).not.toContain('内测')
     expect(plan.prerelease).toBe(false)
+  })
+})
+
+describe('Windows 发版通道（Windows 战役 2026-08-16）', () => {
+  test('不传 winDir 时资产只有 mac 五件（不会凭空要求 Windows 产物）', () => {
+    const plan = createReleasePlan({ clientVersion: '0.1.1880', distDir: '/d' })
+    expect(plan.assets).toHaveLength(5)
+  })
+
+  test('传 winDir 时 mac 五件 + win 三件一起发', () => {
+    const plan = createReleasePlan({ clientVersion: '0.1.1880', distDir: '/d', winDir: '/w' })
+    expect(plan.assets).toEqual([
+      '/d/NarraCat-0.1.1880-mac-arm64.zip',
+      '/d/NarraCat-0.1.1880-mac-arm64.zip.blockmap',
+      '/d/NarraCat-0.1.1880-mac-arm64.dmg',
+      '/d/NarraCat-0.1.1880-mac-arm64.dmg.blockmap',
+      '/d/latest-mac.yml',
+      '/w/NarraCat-0.1.1880-win-x64.exe',
+      '/w/NarraCat-0.1.1880-win-x64.exe.blockmap',
+      '/w/latest.yml',
+    ])
+  })
+
+  // Windows 清单来自 CI 下载的目录，同样可能陈旧（下错 run、复用旧目录）。
+  test('Windows 清单陈旧同样拦下（latest.yml 与本次版本不符）', () => {
+    expect(() =>
+      assertManifestMatchesVersion({
+        manifestContent: 'version: 0.1.1879\nfiles:\n  - url: NarraCat-0.1.1879-win-x64.exe\n',
+        clientVersion: '0.1.1880',
+        assetFileName: 'NarraCat-0.1.1880-win-x64.exe',
+      }),
+    ).toThrow(/与本次待发版本不符/)
   })
 })
 
@@ -50,7 +82,7 @@ describe('assertManifestMatchesVersion', () => {
 
   test('版本号与 zip 文件名都对得上时放行', () => {
     expect(() =>
-      assertManifestMatchesVersion({ manifestContent: validManifest, clientVersion: '0.1.1880', zipFileName }),
+      assertManifestMatchesVersion({ manifestContent: validManifest, clientVersion: '0.1.1880', assetFileName: zipFileName }),
     ).not.toThrow()
   })
 
@@ -58,7 +90,7 @@ describe('assertManifestMatchesVersion', () => {
   // 一份陈旧清单会被原样推上生产——全流程 exit 0，确认闸照常打印新版本号。
   test('清单版本号与本次待发版本不符时拒绝', () => {
     expect(() =>
-      assertManifestMatchesVersion({ manifestContent: validManifest, clientVersion: '0.1.1881', zipFileName }),
+      assertManifestMatchesVersion({ manifestContent: validManifest, clientVersion: '0.1.1881', assetFileName: zipFileName }),
     ).toThrow('与本次待发版本不符')
   })
 
@@ -67,14 +99,14 @@ describe('assertManifestMatchesVersion', () => {
       assertManifestMatchesVersion({
         manifestContent: validManifest,
         clientVersion: '0.1.1880',
-        zipFileName: 'NarraCat-0.1.1881-mac-arm64.zip',
+        assetFileName: 'NarraCat-0.1.1881-mac-arm64.zip',
       }),
     ).toThrow('与本次待发版本不符')
   })
 
   test('清单内容损坏时给出可读错误而不是原始解析异常', () => {
     expect(() =>
-      assertManifestMatchesVersion({ manifestContent: '::: not yaml :::', clientVersion: '0.1.1880', zipFileName }),
+      assertManifestMatchesVersion({ manifestContent: '::: not yaml :::', clientVersion: '0.1.1880', assetFileName: zipFileName }),
     ).toThrow('latest-mac.yml 解析失败')
   })
 })
