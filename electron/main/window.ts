@@ -1,6 +1,5 @@
 import { BrowserWindow, shell, type BrowserWindowConstructorOptions } from 'electron'
 import { resolve, join } from 'node:path'
-import { clearGpuFallbackMarker } from './gpu-fallback.ts'
 
 const TITLE_BAR_HEIGHT = 56
 const MAC_TRAFFIC_LIGHT_Y = 16
@@ -93,9 +92,6 @@ export function createMainWindow(): BrowserWindow {
     if (isSafeExternalUrl(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
-
-  // 窗口内容成功加载 → 清除 GPU 降级标记:下次启动重新尝试硬件加速(自适应恢复)
-  win.webContents.once('did-finish-load', () => clearGpuFallbackMarker())
 
   return win
 }
