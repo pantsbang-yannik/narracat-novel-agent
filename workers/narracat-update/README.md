@@ -1,7 +1,7 @@
 # narracat-update Worker（开源路线图 ④）
 
 更新源加速代理。把 `update.narracat.com/<平台>/<文件名>` 转发到 GitHub Releases
-（`pantsbang-yannik/narracat-novel-agent`，已 public），让国内用户下载更稳。
+（`yannikzz/narracat-novel-agent`，已 public），让国内用户下载更稳。
 **无密钥**——发布仓资产匿名可下载，本 Worker 不需要任何 secret。
 
 ## 对外分发用哪个链接
@@ -42,7 +42,7 @@ curl -sI https://update.narracat.com/mac-arm64/latest-mac.yml
 
 出了坏版本，**不需要传任何文件、不需要命令行**：
 
-1. 打开 GitHub 网页 → 发布仓（`pantsbang-yannik/narracat-novel-agent`）→ Releases
+1. 打开 GitHub 网页 → 发布仓（`yannikzz/narracat-novel-agent`）→ Releases
 2. 编辑上一个正常的 release → 勾选 "Set as the latest release" → 保存
 3. 随后 `curl https://update.narracat.com/mac-arm64/latest-mac.yml` 应立刻返回旧版本号
 

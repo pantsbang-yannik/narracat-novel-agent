@@ -7,7 +7,7 @@ import worker, {
   resolveUpstreamUrl,
 } from './index.ts'
 
-const BASE = 'https://github.com/pantsbang-yannik/narracat-novel-agent/releases'
+const BASE = 'https://github.com/yannikzz/narracat-novel-agent/releases'
 
 describe('resolveUpstreamUrl', () => {
   // 清单不带版本号，必须恒指「最新 release」——这是整套更新的入口。

@@ -6,7 +6,7 @@
  */
 export const UPDATE_FEED_BASE_URL = 'https://update.narracat.com'
 /** 安装包发布到的 GitHub 仓库；与开发主仓不同，gh 调用必须显式 --repo。 */
-export const RELEASE_REPO = 'pantsbang-yannik/narracat-novel-agent'
+export const RELEASE_REPO = 'yannikzz/narracat-novel-agent'
 /** 当前只发 macOS arm64；Windows 战役落位时新增 'win-x64'。 */
 export const MAC_PLATFORM_DIR = 'mac-arm64'
 

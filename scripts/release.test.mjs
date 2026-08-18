@@ -13,7 +13,7 @@ describe('createReleasePlan', () => {
 
   test('tag 与目标仓正确', () => {
     expect(plan.tag).toBe('v0.1.1880')
-    expect(plan.repo).toBe('pantsbang-yannik/narracat-novel-agent')
+    expect(plan.repo).toBe('yannikzz/narracat-novel-agent')
   })
 
   test('五个资产齐全且清单排在最后', () => {
@@ -83,7 +83,7 @@ describe('formatConfirmation', () => {
   test('列出版本号、目标仓、tag 与每个文件的大小', () => {
     const text = formatConfirmation({
       clientVersion: '0.1.1880',
-      repo: 'pantsbang-yannik/narracat-novel-agent',
+      repo: 'yannikzz/narracat-novel-agent',
       tag: 'v0.1.1880',
       files: [
         { name: 'NarraCat-0.1.1880-mac-arm64.zip', bytes: 288_358_400 },
@@ -91,7 +91,7 @@ describe('formatConfirmation', () => {
       ],
     })
     expect(text).toContain('0.1.1880')
-    expect(text).toContain('pantsbang-yannik/narracat-novel-agent')
+    expect(text).toContain('yannikzz/narracat-novel-agent')
     expect(text).toContain('v0.1.1880')
     expect(text).toContain('275.0 MB')
     expect(text).toContain('0.5 KB')
@@ -103,7 +103,7 @@ describe('formatConfirmation', () => {
   test('提醒 tag 基于发布仓默认分支创建、可能与本次代码不一致', () => {
     const text = formatConfirmation({
       clientVersion: '0.1.1880',
-      repo: 'pantsbang-yannik/narracat-novel-agent',
+      repo: 'yannikzz/narracat-novel-agent',
       tag: 'v0.1.1880',
       files: [],
     })

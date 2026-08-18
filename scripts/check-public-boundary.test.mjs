@@ -33,7 +33,7 @@ const TRACKED_ALLOWLIST = new Set([
   'agent-core/narracat/docs/reports/2026-03-28-system-audit-anti-template.md',
   'agent-core/narracat/docs/reports/2026-04-26-system-debt-analysis.md',
 ])
-// 允许 pantsbang-yannik；禁其余个人标识与私有基础设施标识。
+// 允许 yannikzz；禁其余个人标识与私有基础设施标识。
 // Yannik Zhang / AHRB2HD27M（Apple Team ID）是 2026-08-16 人工扫描才发现的正则盲区，补入防复发。
 // the-lumos-labs / narracat-corpus-service：私有组织名与私有仓名，两道守卫原本都不拦，同日补入。
 // corpus.narracat.com 有意不收：那是客户端真实调用的线上端点，反编译即得，藏不住也不必藏。

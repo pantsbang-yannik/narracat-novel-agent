@@ -38,7 +38,7 @@ describe('update feed 契约', () => {
   })
 
   test('发布仓是那个已 public 的新仓', () => {
-    expect(RELEASE_REPO).toBe('pantsbang-yannik/narracat-novel-agent')
+    expect(RELEASE_REPO).toBe('yannikzz/narracat-novel-agent')
   })
 
   test('tag 是版本号前加 v', () => {

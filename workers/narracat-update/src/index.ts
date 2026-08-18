@@ -11,7 +11,7 @@
 // 本 Worker 无密钥：发布仓是 public，资产匿名可下载。
 
 /** 安装包所在的公开仓。与开发主仓不是同一个。 */
-const RELEASE_REPO = 'pantsbang-yannik/narracat-novel-agent'
+const RELEASE_REPO = 'yannikzz/narracat-novel-agent'
 const RELEASES_BASE = `https://github.com/${RELEASE_REPO}/releases`
 
 /** 允许的平台目录。Windows 战役落位时无需改这里。 */

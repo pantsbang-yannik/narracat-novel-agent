@@ -16,7 +16,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           path-to-signatures: signatures/cla.json
-          path-to-document: https://github.com/pantsbang-yannik/narracat-novel-agent/blob/main/docs/CLA.md
+          path-to-document: https://github.com/yannikzz/narracat-novel-agent/blob/main/docs/CLA.md
           branch: signatures
-          allowlist: pantsbang-yannik
+          allowlist: yannikzz
           custom-notsigned-prcomment: 感谢贡献！请先阅读 CLA（上方链接）并按提示回复签署语句。
