@@ -1,0 +1,74 @@
+# Windows x64 出包（Windows 战役 2026-08-16）。
+#
+# 为什么必须走 CI：SignPath Foundation 的免费 OV 签名硬要求「产物必须以可验证的方式
+# 从源码构建」。mac 包因为签名依赖本机 Keychain 仍是手打，两套流程并存是有意为之。
+#
+# 本流水线只出包、不发布。发布由人在本机跑 `bun --no-cache run release --with-win <目录>`，
+# 把这里下载下来的三个文件与 mac 产物一并传进同一个 GitHub Release——「发布必须过人工
+# 确认闸」这条纪律不因为加了 CI 就松掉。
+#
+# ⚠️ CI 全绿不构成任何功能保证：本流水线从不启动界面，而已知的两个 Windows 崩溃
+#（issue #1 details 挂死 / issue #3 locales 空白屏）全在渲染层。真机走查不可省。
+name: Windows Release Build
+
+on:
+  # workflow_dispatch 有个硬限制：**workflow 文件必须存在于默认分支**才能被手动触发
+  #（"This event will only trigger a workflow run if the workflow file exists on the
+  # default branch"）。本战役分支在产品主人 Windows 真机验收前不合 main，所以手动触发
+  # 这条路在合并前是走不通的——push 触发是合并前唯一能跑起 CI 的入口。
+  # 合进 main 之后，下面这条 push 触发即可删除，只留 workflow_dispatch。
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/windows-port
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # client-build-version.mjs 靠 `git rev-list --count HEAD` 派生版本号，
+          # 浅克隆会数出错误的 commit 数 → 包的版本号与 mac 端对不上。
+          fetch-depth: 0
+
+      # 打包脚本全部由 `node` 直接运行（package-rc.mjs 用的是 process.execPath），
+      # 且第一步就是 check-node-runtime.mjs 硬闸 ^22.12.0——必须显式装 Node 22，
+      # 不能指望 bun 自带的运行时。
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: 安装依赖
+        run: bun install --no-cache
+
+      - name: 打包（未签名 NSIS）
+        env:
+          NARRACAT_CORPUS_TOKEN: ${{ secrets.NARRACAT_CORPUS_TOKEN }}
+        run: bun --no-cache run package:win
+
+      # 独立一步做正向断言：electron-builder 在很多失败模式下是 warn + exit 0，
+      # 「打包成功但没有产物」在本项目有前科（公证静默跳过）。
+      - name: 确认三件产物齐全
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -lh dist/*.exe dist/*.exe.blockmap dist/latest.yml
+          test "$(ls dist/*.exe | wc -l)" -eq 1
+          echo "=== latest.yml ==="
+          cat dist/latest.yml
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-unsigned
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            dist/NarraCat-*-win-x64.exe
+            dist/NarraCat-*-win-x64.exe.blockmap
+            dist/latest.yml
