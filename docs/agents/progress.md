@@ -4,13 +4,29 @@
 
 ## Current Branch
 
-`main`（= `1f4b0a1`，**已 push**）。社区首批四个 PR（#2/#7/#8/#9）全部合并，PR 审核标准已进 `CONTRIBUTING.md` 与 PR 模板。仓库已合一，「公开镜像仓 + 定向同步」的说法自 2026-08-16 起作废——本仓即唯一开发仓。
+`main`（= `c999265`，**已 push**）。社区第二批三个 PR（#18/#19/#20）合并，对应 issue #14/#16/#17 全部关闭、#15 拆分归位后 close。引擎 **4.0.172**。仓库已合一，「公开镜像仓 + 定向同步」的说法自 2026-08-16 起作废——本仓即唯一开发仓。
 
 ## Current Phase
 
 主线 `main`。产品北极星 = ADR-0030「账房归我们 / 花归用户 / 尺归读者」；产品方向 2026-07-11 定案两大模块「用户编辑 + 可配置底座」。**正文编辑器主战役已收官**（PR #443 合并 main，ADR-0031，引擎 4.0.91，产品主人真机验收通过）；写作质量「脱胎换骨」主线阶段性收刀（arc 速度靶 PR #441 / 获得引擎四刀 PR #442 均已合并）。ADR 已扩至 **0035**。
 
 产品路线以下方 **Next（产品路线图 · 2026-07-12 统筹版）** 为准：四条泳道 = A 花的所有权（用户编辑）/ B 花的表达权（可配置底座）/ C 尺（评价与验证）/ D 账房（记忆与资产底座）。战略层以 `docs/COMPASS.md` 为准，执行入口 `/next-issue`。
+
+**2026-08-18（社区第二批：外部报告三条修复全部合并，PR #18/#19/#20）**：报告人 @Akimixu-19897 一天内提三条（#14/#15/#16），逐条读代码定位后**结论与报告不完全一致**，是本轮最值得记的部分。
+
+**#16（pi 传输层，PR #18）**：Anthropic 兼容端点把完整工具参数放 `content_block_start.input`、之后不发 `input_json_delta` 时，`pi-ai@0.73.1` 在 `content_block_stop` 无条件 `parseStreamingJson("")` → `{}`，参数被抹掉。报告属实且**影响面比报告更大**——`pi-model.ts` 把 `api` 恒定写成 `anthropic-messages`，全部 provider 都走这段解析，是主力路径而非边缘兼容。修在官方扩展点（`message_update` 捕 eager 值 + `message_end` 经 `_replaceMessageInPlace` 写回）；更早的三个落点（注入 streamFn / `prepareArguments` / `tool_call` 事件）逐个验证不可行，理由钉在实现文件顶部。**带拆除说明书**（钉死 `pi-ai@0.73.1`、写明上游修好后如何确认与摘除），第一条测试断言即解除信号。
+
+**#15 → 拆分归位（close，另开 #17）**：报告把两种错误形态归为一因，实测证明根因不同——`{}` 是 #16 的传输层丢失；`{"phase":1,"scope":"full"}`（缺 payload）是 `partialJson` 在 payload 值开始前被截断、`parseStreamingJson` **静默**吐出半个对象。报告提的两条改进（内联 payload schema +8.5K 字符、给 prompt 加参数提示）均未采纳，但顺着现场挖到真问题 → #17。
+
+**#17（PR #20）**：`novel_submit_outline` 的 `phase` 恒为 1、handler 只做一次「是不是 1」的检查、无第二个分支，却是 `required`，而 `plan.md` 与 `outline-architect.md` 全文从未提过它。改可选（缺省 1）。**判「省略」只认 `undefined` 不能用 `??`**——`null ?? 1` 会把显式 null 当省略放行，而 `core.ts` 的 `runTool` 直接调 handler、**不跑 tool inputSchema 校验**，handler 是唯一防线。
+
+**#14（PR #19）**：现象属实但**根因不在 agent 侧**——world-curator 工作方式第 1 条本就要求读既有设定，缺口在「任务列出的」这个限定：`world.md` 的 Envelope 槽位写「相关 bible/ 文件路径列表」由主会话自由裁量，而命令全文没有任何一步要求枚举（frontmatter 早已声明 Glob 权限却零处使用，对比 `plan.md` 有五处）。补 Glob 枚举，并发现整个 Envelope **从来就没有立项卡**——子会话不共享主会话上下文，步骤 0 主会话读 premise 补救不了，故补 `立项卡: bible/premise.md` 槽位 + 改 curator 第 1 条使其真会去读（只加槽位不改 prompt 等于白加）。
+
+**外审抓到三个 P1，全部属实并已修**（这轮的真实教训，比修复本身值钱）：① PR#18 恢复判据只看「最终为空」，漏了「有没有来过 `toolcall_delta`」——服务端先给 eager 值再发一条把参数撤空的增量时，会把模型**主动放弃**的调用硬塞回去执行；改成两条件同时成立。② PR#19 漏 `bible/premise.md`（见上）。③ PR#20 的 `?? ` 把显式 null 当省略。**共同点：三处的测试都只覆盖了作者自己想到的场景，全绿证明不了边界正确。** 另有一条自我更正：PR 描述里写的「两条 agent-core PR 版本号错开故合并顺序不限」是错的——`git merge-tree` 实测四个版本文件同一行全 CONFLICT，先落一条后另一条必须 rebase（#20 已按此 rebase 于 4.0.171 之上落 4.0.172）。
+
+**工程坑存档**：`agent-core/narracat/CLAUDE.md` 的 bump 流程第 (1) 步「CHANGELOG.md 顶部加新版本段」在公开仓**静默失效**——`.gitignore:41` 把该文件归为过程私产（公开仓首发 `5c3f12d` 即排除）。踩法隐蔽：编辑成功、文件真改了、`git add -A` 不报错（git 静默跳过 ignored），只是永远不进 commit；且它是未跟踪文件，`git checkout` 换分支时原地不动，会把 A 分支写的段带到 B 分支。**bump 只做真正生效的四处**（manifest / mcp-server package.json / lock.json / CLAUDE.md 基准行），变更说明走 commit message。该步骤要不要改写，待产品主人定。
+
+**验证**：合并后 main 上 `typecheck` 通过、App 侧 `bun run test` **2990 pass / 0 fail across 297 files**、mcp-server `npm run test` **925 pass / 0 fail across 38 files**、`verify:narracat-agent-core` 版本一致 4.0.172。CI 三个 PR 全绿（`cla` 曾三次红，日志 `graphql call to get the committers details failed: HttpError: No server is currently available`，是 GitHub 平台 503 抖动，同 commit 重跑即过 10s——不是代码问题）。**待办**：#18 缺真机 eager 端点验证、#19 缺原始场景 dogfood，两处均已在 issue 下请报告人协助，PR 描述亦如实标注。
 
 **2026-08-16（打包链修复：探针摘掉 headless 依赖 + 追加产物冒烟，PR #6）**：仓库合一换到公开仓工作目录后 `bun run package` 当场挂在第 8 步——`Headless Agent runtime node 不存在：build/agent-runtime/NarraCatAgentRuntime/bin/node`。**根因不是今天引入的**：`db18df09`（2026-08-02 换 pi / claude-sdk 全链退役）删掉了 `prepare-headless-agent-runtime.mjs` 与 extraResources 里的 NarraCatAgentRuntime，提交信息也写了「packaged-runtime-probe 退役」，但消费方 `probe-staged-agent-core-runtime.mjs` 漏删、步骤链仍在调它。**断了两周没被发现，因为 `build/` 在 .gitignore——旧工作目录里躺着 108MB 旧 runtime 产物替它撑着**，期间的签名公证、自动更新、正式发版全是在这个假绿状态下跑成功的；换到干净工作区才第一次真炸（残渣与 48MB 的 `agent-runtime-cache` 均已清除）。
 
