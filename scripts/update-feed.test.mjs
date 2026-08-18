@@ -61,7 +61,11 @@ describe('update feed 契约', () => {
   // 且打包依旧「成功」。这是典型静默失效，故用测试钉住。
   test('package.json 的 publish 配置与 feed 基址一致', () => {
     const pkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))
-    expect(pkg.build.publish).toEqual({ provider: 'generic', url: 'https://update.narracat.com/mac-arm64' })
+    // publish 按平台分设（Windows 战役）：顶层那份写死 mac-arm64 会让 Windows 包
+    // 拿到 mac 的 feed，更新时下到 .dmg。两个平台各自指向自己的目录。
+    expect(pkg.build.publish).toBeUndefined()
+    expect(pkg.build.mac.publish).toEqual({ provider: 'generic', url: 'https://update.narracat.com/mac-arm64' })
+    expect(pkg.build.win.publish).toEqual({ provider: 'generic', url: 'https://update.narracat.com/win-x64' })
     expect(pkg.dependencies['electron-updater']).toBeDefined()
   })
 

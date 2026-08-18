@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
 const appIconSvg = readFileSync('build/icon.svg', 'utf8')
@@ -108,5 +108,48 @@ describe('RC package configuration', () => {
       from: 'agent-core/narracat',
       to: 'NarraCatAgentCore',
     })
+  })
+})
+
+describe('Windows 打包配置（Windows 战役 2026-08-16）', () => {
+  test('只出 NSIS 安装包，架构只 x64', () => {
+    // 不出便携 zip：electron-updater 在 Windows 的更新载体就是 nsis exe + latest.yml，
+    // 便携 zip 不参与自动更新，多一种产物就多一条没人测的路径。
+    expect(packageJson.build.win.target).toEqual([{ target: 'nsis', arch: ['x64'] }])
+  })
+
+  test('产物命名沿用顶层 ${os} 模板，与更新源 Worker 的 ASSET_NAME_PATTERN 对得上', () => {
+    // 顶层模板一份服务两个平台：electron-builder 的 ${os} 取 Platform.buildConfigurationKey，
+    // mac → "mac"、windows → "win"（app-builder-lib/out/core.js:46-48），因此
+    // mac 出 NarraCat-<版本>-mac-arm64.dmg、win 出 NarraCat-<版本>-win-x64.exe。
+    // 不下沉到各平台段：两份写死的字符串要同步维护，比一份宏更容易漂移。
+    expect(packageJson.build.artifactName).toBe('NarraCat-${version}-${os}-${arch}.${ext}')
+    expect(packageJson.build.win.artifactName).toBeUndefined()
+    // Worker 侧正则：^NarraCat-(\d+\.\d+\.\d+)-[a-z0-9-]+\.[a-z0-9.]+$
+    const assetNamePattern = /^NarraCat-(\d+\.\d+\.\d+)-[a-z0-9-]+\.[a-z0-9.]+$/
+    expect(assetNamePattern.test('NarraCat-0.1.1880-win-x64.exe')).toBe(true)
+    expect(assetNamePattern.test('NarraCat-0.1.1880-win-x64.exe.blockmap')).toBe(true)
+  })
+
+  test('装机器人式一键安装关掉：允许用户选安装目录、装当前用户（免 UAC）', () => {
+    expect(packageJson.build.nsis.oneClick).toBe(false)
+    expect(packageJson.build.nsis.perMachine).toBe(false)
+    expect(packageJson.build.nsis.allowToChangeInstallationDirectory).toBe(true)
+  })
+
+  test('publish 分平台，各自指向自己的 feed 目录', () => {
+    // 顶层那份写死 mac-arm64：Windows 包会拿到 mac 的 feed，更新时下载到 .dmg。
+    expect(packageJson.build.publish).toBeUndefined()
+    expect(packageJson.build.mac.publish).toEqual({ provider: 'generic', url: 'https://update.narracat.com/mac-arm64' })
+    expect(packageJson.build.win.publish).toEqual({ provider: 'generic', url: 'https://update.narracat.com/win-x64' })
+  })
+
+  test('Windows 图标就位（electron-builder 据此生成 .ico）', () => {
+    expect(packageJson.build.win.icon).toBe('build/icon.png')
+    expect(existsSync('build/icon.png')).toBe(true)
+  })
+
+  test('package:win 脚本走同一套 package-rc，只是换目标平台', () => {
+    expect(packageJson.scripts['package:win']).toBe('node scripts/package-rc.mjs --platform win32')
   })
 })
