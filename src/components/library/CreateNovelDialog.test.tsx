@@ -8,6 +8,7 @@ import {
   CREATE_NOVEL_AUTOMATION_COLLABORATIVE_LABEL,
   CREATE_NOVEL_GENRE_HELP,
   CREATE_NOVEL_GENRE_PLACEHOLDER,
+  CREATE_NOVEL_INITIAL_AUTOMATION_LEVEL,
   CREATE_NOVEL_INITIAL_GENRE,
   CREATE_NOVEL_TITLE_PLACEHOLDER,
   CreateNovelDialogPanel,
@@ -69,12 +70,15 @@ describe('CreateNovelDialogPanel', () => {
     expect(html).toContain('推荐')
     expect(html).toContain(CREATE_NOVEL_AUTOMATION_COLLABORATIVE_LABEL)
     expect(html).toContain(CREATE_NOVEL_AUTOMATION_AUTO_LABEL)
-    // 推荐徽标挂在协作模式选项上，且协作模式排在自动前面（默认档=协作模式）。
-    expect(html.indexOf(CREATE_NOVEL_AUTOMATION_COLLABORATIVE_LABEL)).toBeLessThan(
-      html.indexOf(CREATE_NOVEL_AUTOMATION_AUTO_LABEL),
+    // 推荐徽标挂在全自动选项上，且全自动排在协作模式前面（默认档=全自动，#27）。
+    expect(html.indexOf(CREATE_NOVEL_AUTOMATION_AUTO_LABEL)).toBeLessThan(
+      html.indexOf(CREATE_NOVEL_AUTOMATION_COLLABORATIVE_LABEL),
+    )
+    expect(html.indexOf(CREATE_NOVEL_AUTOMATION_AUTO_LABEL)).toBeLessThan(
+      html.indexOf('data-create-novel-automation-recommended="true"'),
     )
     expect(html.indexOf('data-create-novel-automation-recommended="true"')).toBeLessThan(
-      html.indexOf(CREATE_NOVEL_AUTOMATION_AUTO_LABEL),
+      html.indexOf(CREATE_NOVEL_AUTOMATION_COLLABORATIVE_LABEL),
     )
     expect(html).toContain('data-create-novel-automation-help="true"')
     // 传入 automationLevel="auto" 时，说明文案应讲清"全程不打断"的后果。
@@ -94,6 +98,10 @@ describe('CreateNovelDialogPanel', () => {
 
   test('does not prefill a genre before the author chooses one', () => {
     expect(CREATE_NOVEL_INITIAL_GENRE).toBe('')
+  })
+
+  test('defaults a new novel to the recommended fully automatic mode (#27)', () => {
+    expect(CREATE_NOVEL_INITIAL_AUTOMATION_LEVEL).toBe('auto')
   })
 
   test('collaborative automation shows its own consequence copy (dogfood #5 default)', () => {

@@ -22,6 +22,7 @@ import {
 import { parseYamlRecord, readNumber, readRecord, readString, stringifyYamlRecord } from './yaml'
 import { hasNarratorVoiceSection as containsNarratorVoiceSection } from '@shared/lib/narrator-voice'
 import type {
+  NovelAutomationLevel,
   NovelChapterStatus,
   NovelCheckpoint,
   NovelProjectDetail,
@@ -163,6 +164,11 @@ function readProjectCoverPreset(config: Record<string, unknown>, identity: strin
     readString(config, 'coverPreset')?.trim() ||
     deterministicCoverPreset(identity)
   )
+}
+
+/** 引擎按 `automation_level == "auto"` 分支，缺省/非法值一律当协作档（`commands/plan.md`、`commands/write.md`）。 */
+function readProjectAutomationLevel(config: Record<string, unknown>): NovelAutomationLevel {
+  return readString(config, 'automation_level')?.trim() === 'auto' ? 'auto' : 'collaborative'
 }
 
 function normalizeMetadataTitle(title: string): string {
@@ -690,6 +696,7 @@ export async function loadNovelProjectSummary(projectPath: string): Promise<Nove
     title: (readString(config, 'title') ?? basename(projectPath)) || '未命名小说',
     genre: readProjectGenre(config),
     coverPreset: readProjectCoverPreset(config, id),
+    automationLevel: readProjectAutomationLevel(config),
     path: projectPath,
     status,
     chapterProgress: `${completed} / ${planned} 章`,
@@ -789,6 +796,11 @@ export async function updateNovelProjectMetadata(
 
   if (input.coverPreset !== undefined) {
     config.cover_preset = normalizeMetadataCoverPreset(input.coverPreset)
+    changed = true
+  }
+
+  if (input.automationLevel !== undefined) {
+    config.automation_level = input.automationLevel
     changed = true
   }
 

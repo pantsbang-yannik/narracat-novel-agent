@@ -18,6 +18,7 @@ import {
   LibraryProjectGrid,
   LibraryRoute,
   isLibraryProjectDeleteConfirmationValid,
+  libraryAutomationMenuLabel,
   summarizeLibraryProjects,
 } from './library'
 import { getLibraryCoverPreset } from '@/lib/library-covers'
@@ -350,6 +351,12 @@ describe('LibraryRoute presentation', () => {
     expect(html).toContain('完结')
     expect(html).not.toContain('可写作')
     expect(html).not.toContain('未完成')
+  })
+
+  test('shows the current automation mode in the card menu and explains why it can be locked (#27)', () => {
+    expect(libraryAutomationMenuLabel('auto', false)).toBe('自动化：全自动')
+    expect(libraryAutomationMenuLabel('collaborative', false)).toBe('自动化：协作模式')
+    expect(libraryAutomationMenuLabel('auto', true)).toBe('Agent 运行中，不能切换模式')
   })
 
   test('requires the visible title before deleting a project', () => {

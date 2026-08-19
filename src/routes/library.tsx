@@ -14,6 +14,7 @@ import {
   Search,
   Settings as SettingsIcon,
   Trash2,
+  Wand2,
   X,
 } from 'lucide-react'
 import { BrandIllustration, BrandLockup } from '@/components/brand'
@@ -33,12 +34,21 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { AppShell } from '@/components/AppShell'
-import { CreateNovelDialog } from '@/components/library/CreateNovelDialog'
+import {
+  CREATE_NOVEL_AUTOMATION_AUTO_LABEL,
+  CREATE_NOVEL_AUTOMATION_COLLABORATIVE_LABEL,
+  CreateNovelDialog,
+} from '@/components/library/CreateNovelDialog'
 import { UpdateReadyBanner } from '@/components/settings/UpdateReadyBanner'
 import {
   DESTRUCTIVE_INLINE_CLASS,
@@ -72,7 +82,7 @@ import {
   saveLibraryProjectMetadata,
   useLibraryProjects,
 } from '@/lib/use-novel-project'
-import type { NovelProjectSummary } from '@shared/types/novel'
+import type { NovelAutomationLevel, NovelProjectSummary } from '@shared/types/novel'
 
 type LibrarySummary = {
   total: number
@@ -97,6 +107,16 @@ export const LIBRARY_PROJECT_METADATA_DIALOG_CONTENT_CLASS =
 
 export const LIBRARY_PROJECT_DELETE_DIALOG_CONTENT_CLASS = 'bg-workspace sm:max-w-[520px]'
 export const LIBRARY_PROJECT_BACKUP_DIALOG_CONTENT_CLASS = 'bg-workspace sm:max-w-[520px]'
+
+const LIBRARY_AUTOMATION_LEVEL_LABELS: Record<NovelAutomationLevel, string> = {
+  auto: CREATE_NOVEL_AUTOMATION_AUTO_LABEL,
+  collaborative: CREATE_NOVEL_AUTOMATION_COLLABORATIVE_LABEL,
+}
+
+/** 「更多」菜单里的自动化入口文案：常态显示当前档，Agent 运行中改成说明原因（与备份/删除一致）。 */
+export function libraryAutomationMenuLabel(automationLevel: NovelAutomationLevel, blocked: boolean): string {
+  return blocked ? 'Agent 运行中，不能切换模式' : `自动化：${LIBRARY_AUTOMATION_LEVEL_LABELS[automationLevel]}`
+}
 
 export function statusLabel(status: NovelProjectSummary['status']): string {
   if (status === 'ready') return '可写作'
@@ -838,6 +858,18 @@ export function LibraryProjectManagementMenu({ project }: { project: NovelProjec
 
     return Object.values(state.threadsById).some((thread) => thread.activeRun?.projectPath === project.path)
   })
+  const automationLevel = project.automationLevel
+
+  async function switchAutomationLevel(nextLevel: NovelAutomationLevel) {
+    if (nextLevel === automationLevel) return
+
+    try {
+      await saveLibraryProjectMetadata({ projectPath: project.path, automationLevel: nextLevel })
+      toast.success(`已切换到${LIBRARY_AUTOMATION_LEVEL_LABELS[nextLevel]}，下一次规划大纲或写作时生效。`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '切换自动化模式失败，请重试。')
+    }
+  }
 
   return (
     <>
@@ -863,6 +895,31 @@ export function LibraryProjectManagementMenu({ project }: { project: NovelProjec
             <ImageIcon className="size-4" />
             更换封面
           </DropdownMenuItem>
+          {automationLevel && (
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger
+                disabled={deleteBlocked}
+                data-library-project-automation-menu-item="true"
+                className="data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+              >
+                <Wand2 className="size-4" />
+                {libraryAutomationMenuLabel(automationLevel, deleteBlocked)}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuRadioGroup
+                  value={automationLevel}
+                  onValueChange={(value) => void switchAutomationLevel(value as NovelAutomationLevel)}
+                >
+                  <DropdownMenuRadioItem value="auto">
+                    {LIBRARY_AUTOMATION_LEVEL_LABELS.auto}
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="collaborative">
+                    {LIBRARY_AUTOMATION_LEVEL_LABELS.collaborative}
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             disabled={deleteBlocked}
