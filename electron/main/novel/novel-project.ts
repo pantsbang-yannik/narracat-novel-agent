@@ -166,7 +166,15 @@ function readProjectCoverPreset(config: Record<string, unknown>, identity: strin
   )
 }
 
-/** 引擎按 `automation_level == "auto"` 分支，缺省/非法值一律当协作档（`commands/plan.md`、`commands/write.md`）。 */
+/**
+ * 缺省/非法值一律当协作档。与引擎只对得上一半，别把这条注释读成「处处一致」：
+ * `commands/plan.md` 判 `== "auto"`（`docs/contracts/new-character-intake.md` 同款），缺 key 时
+ * 确实退回逐步确认，与这里一致；但 `commands/write.md` 判的是 `== "collaborative"`，缺 key 时两个
+ * 分支都不命中、写作确认门根本不触发，行为等同全自动——这处引擎侧不一致要单独走引擎层修，App 侧
+ * 只如实显示当前档，不在这里替引擎兜。
+ * 新建（novel-create.ts）与切档（updateNovelProjectMetadata）都会写入显式值，缺 key 只出现在历史
+ * 项目或被手工改过的 config.yaml 上。
+ */
 function readProjectAutomationLevel(config: Record<string, unknown>): NovelAutomationLevel {
   return readString(config, 'automation_level')?.trim() === 'auto' ? 'auto' : 'collaborative'
 }

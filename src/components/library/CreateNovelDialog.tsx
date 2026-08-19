@@ -31,7 +31,8 @@ export const CREATE_NOVEL_AUTOMATION_COLLABORATIVE_LABEL = '协作模式'
 export const CREATE_NOVEL_AUTOMATION_COLLABORATIVE_HELP =
   '关键节点先和你确认再继续：大纲分段生成、写作前过目。'
 export const CREATE_NOVEL_AUTOMATION_AUTO_LABEL = '全自动'
-export const CREATE_NOVEL_AUTOMATION_AUTO_HELP = '全程不打断，大纲和写作一口气跑完，适合想直接看结果。'
+export const CREATE_NOVEL_AUTOMATION_AUTO_HELP =
+  '中途不再停下来问你：大纲和写作一口气跑完，一章大约要 20 分钟，花费也更高。'
 
 function Field({
   asLabel = true,

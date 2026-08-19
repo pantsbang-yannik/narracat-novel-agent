@@ -45,7 +45,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { AppShell } from '@/components/AppShell'
 import {
+  CREATE_NOVEL_AUTOMATION_AUTO_HELP,
   CREATE_NOVEL_AUTOMATION_AUTO_LABEL,
+  CREATE_NOVEL_AUTOMATION_COLLABORATIVE_HELP,
   CREATE_NOVEL_AUTOMATION_COLLABORATIVE_LABEL,
   CreateNovelDialog,
 } from '@/components/library/CreateNovelDialog'
@@ -111,6 +113,15 @@ export const LIBRARY_PROJECT_BACKUP_DIALOG_CONTENT_CLASS = 'bg-workspace sm:max-
 const LIBRARY_AUTOMATION_LEVEL_LABELS: Record<NovelAutomationLevel, string> = {
   auto: CREATE_NOVEL_AUTOMATION_AUTO_LABEL,
   collaborative: CREATE_NOVEL_AUTOMATION_COLLABORATIVE_LABEL,
+}
+
+/**
+ * 切换入口的后果说明与新建对话框同源（同一份文案常量）：改档改的是 Agent 之后怎么跑，
+ * 光给两个单选项等于让作者盲选，这里必须把「换来什么、代价是什么」摆在选项里。
+ */
+const LIBRARY_AUTOMATION_LEVEL_HELP: Record<NovelAutomationLevel, string> = {
+  auto: CREATE_NOVEL_AUTOMATION_AUTO_HELP,
+  collaborative: CREATE_NOVEL_AUTOMATION_COLLABORATIVE_HELP,
 }
 
 /** 「更多」菜单里的自动化入口文案：常态显示当前档，Agent 运行中改成说明原因（与备份/删除一致）。 */
@@ -905,16 +916,26 @@ export function LibraryProjectManagementMenu({ project }: { project: NovelProjec
                 <Wand2 className="size-4" />
                 {libraryAutomationMenuLabel(automationLevel, deleteBlocked)}
               </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
+              <DropdownMenuSubContent className="w-72">
                 <DropdownMenuRadioGroup
                   value={automationLevel}
                   onValueChange={(value) => void switchAutomationLevel(value as NovelAutomationLevel)}
                 >
-                  <DropdownMenuRadioItem value="auto">
-                    {LIBRARY_AUTOMATION_LEVEL_LABELS.auto}
+                  <DropdownMenuRadioItem value="auto" className="items-start">
+                    <span className="grid gap-0.5">
+                      <span>{LIBRARY_AUTOMATION_LEVEL_LABELS.auto}</span>
+                      <span className="text-xs font-normal leading-5 text-hint-foreground">
+                        {LIBRARY_AUTOMATION_LEVEL_HELP.auto}
+                      </span>
+                    </span>
                   </DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="collaborative">
-                    {LIBRARY_AUTOMATION_LEVEL_LABELS.collaborative}
+                  <DropdownMenuRadioItem value="collaborative" className="items-start">
+                    <span className="grid gap-0.5">
+                      <span>{LIBRARY_AUTOMATION_LEVEL_LABELS.collaborative}</span>
+                      <span className="text-xs font-normal leading-5 text-hint-foreground">
+                        {LIBRARY_AUTOMATION_LEVEL_HELP.collaborative}
+                      </span>
+                    </span>
                   </DropdownMenuRadioItem>
                 </DropdownMenuRadioGroup>
               </DropdownMenuSubContent>

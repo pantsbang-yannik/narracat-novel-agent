@@ -7,10 +7,10 @@ import {
   configPath,
   readCurrentConfig,
   readInputRecord,
-  readOptionalString,
   readRequiredString,
   userDataPath,
 } from './inputs.ts'
+import { readAutomationLevel, readUpdateNovelProjectMetadataInput } from './novel-metadata-input.ts'
 import { getAgentRuntimeCoordinator, runProjectMutation } from './agent.ts'
 import { pruneMissingRecentNovelPaths, scanNovelProjects } from '../novel/novel-index.ts'
 import {
@@ -93,10 +93,8 @@ import {
 import type {
   CreateNovelProjectInput,
   DeleteNovelProjectInput,
-  NovelAutomationLevel,
   PasteReferenceSourceInput,
   RemoveReferenceSourceInput,
-  UpdateNovelProjectMetadataInput,
 } from '@shared/types/novel'
 import type {
   CreateNovelProjectBackupDialogResult,
@@ -243,11 +241,6 @@ function readWorkbenchArtifactInput(input: unknown): {
   return { projectPath, objectId, volumeNumber }
 }
 
-function readAutomationLevel(value: unknown): NovelAutomationLevel {
-  if (value !== 'collaborative' && value !== 'auto') throw new Error('自动化级别非法。')
-  return value
-}
-
 function readCreateNovelInput(input: unknown): CreateNovelProjectInput {
   const value = readInputRecord(input, '新建小说参数非法。')
   const title = readRequiredString(value, 'title', '缺少小说标题。')
@@ -257,25 +250,6 @@ function readCreateNovelInput(input: unknown): CreateNovelProjectInput {
     title,
     genre,
     automationLevel: readAutomationLevel(value.automationLevel),
-  }
-}
-
-function readUpdateNovelProjectMetadataInput(input: unknown): UpdateNovelProjectMetadataInput {
-  const value = readInputRecord(input, '小说信息参数非法。')
-  const title = readOptionalString(value, 'title', '小说标题参数非法。')
-  const coverPreset = readOptionalString(value, 'coverPreset', '封面预设参数非法。')
-  const automationLevel =
-    value.automationLevel === undefined ? undefined : readAutomationLevel(value.automationLevel)
-
-  if (title === undefined && coverPreset === undefined && automationLevel === undefined) {
-    throw new Error('没有可更新的小说信息。')
-  }
-
-  return {
-    projectPath: readRequiredString(value, 'projectPath', '缺少项目路径。'),
-    ...(title !== undefined ? { title } : {}),
-    ...(coverPreset !== undefined ? { coverPreset } : {}),
-    ...(automationLevel !== undefined ? { automationLevel } : {}),
   }
 }
 
