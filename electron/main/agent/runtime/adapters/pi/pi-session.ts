@@ -20,6 +20,12 @@ import type { Extension, ToolDefinition } from '@mariozechner/pi-coding-agent'
 import type { AgentTokenUsage } from '@shared/types/agent'
 import { PI_MAX_TURNS_MESSAGE_TYPE, PI_RUN_END_MESSAGE_TYPE, PI_SESSION_MESSAGE_TYPE } from './pi-event-mapper.ts'
 import type { PiMaxTurnsMessage, PiRunEndMessage, PiSessionMessage } from './pi-event-mapper.ts'
+import {
+  createPiRunTimingRecorder,
+  isEmptyPiRunTimingReport,
+  PI_TIMING_FILE_SUFFIX,
+  writePiRunTimingReport,
+} from './pi-run-timing.ts'
 // 类型导入（编译期擦除）：pi-subagent 反向依赖本模块的 runPiSession，值导入会成环。
 import type { PiSubagentEventChannel, PiSubagentEventMessage } from './pi-subagent.ts'
 
@@ -109,15 +115,25 @@ function createIsolatedResourceLoader(systemPrompt: string | undefined, extensio
  * 30 天会话清理的同族衰减）。 */
 const SESSION_FILE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
+/** 耗时报告 TTL（issue #28 刀 D）：报告是纯数字账、体积极小，比会话 JSONL 留久些——优化收益要
+ *  跨天比对改动前后的耗时瀑布。 */
+const TIMING_FILE_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
 /** pi session id 形状（randomUUID 及其变体的宽松面）：跨层来的 id 先过这道，不让脏值进文件名匹配。 */
 const SESSION_ID_SHAPE = /^[A-Za-z0-9-]{8,64}$/
 
 /**
  * 陈旧会话文件清扫：JSONL 里是含小说全文的完整对话，不清扫会在 userData 无限积累。TTL 判 mtime
- * （活跃会话每次 append 都会刷新），每进程每目录只扫一次（见 sweptSessionDirs）；尽力而为，
+ * （活跃会话每次 append 都会刷新），每进程每目录只扫一次（见 sweptDirs）；尽力而为，
  * 任何失败都不阻断 run。一次性惰性清扫，不常驻定时任务。
+ * suffix 可换（耗时报告目录复用同一套清扫，见 resolveTimingDir）。
  */
-export function sweepStalePiSessionFiles(dir: string, ttlMs = SESSION_FILE_TTL_MS, now = Date.now()): void {
+export function sweepStalePiSessionFiles(
+  dir: string,
+  ttlMs = SESSION_FILE_TTL_MS,
+  now = Date.now(),
+  suffix = '.jsonl',
+): void {
   let entries: string[]
   try {
     entries = readdirSync(dir)
@@ -125,7 +141,7 @@ export function sweepStalePiSessionFiles(dir: string, ttlMs = SESSION_FILE_TTL_M
     return
   }
   for (const name of entries) {
-    if (!name.endsWith('.jsonl')) continue
+    if (!name.endsWith(suffix)) continue
     try {
       const path = join(dir, name)
       if (statSync(path).mtimeMs < now - ttlMs) unlinkSync(path)
@@ -152,7 +168,21 @@ export function findPiSessionFile(dir: string, sessionId: string): string | unde
   return latest ? join(dir, latest) : undefined
 }
 
-const sweptSessionDirs = new Set<string>()
+/** 已惰性清扫过的目录（会话目录与耗时报告目录共用一份，键是绝对路径不会撞）。 */
+const sweptDirs = new Set<string>()
+
+/**
+ * 耗时报告目录（userData/pi-agent/timing，issue #28 刀 D）：与会话 JSONL 分开放——两者 TTL 不同，
+ * 且不能让报告落进 findPiSessionFile 的匹配面。首次使用时惰性清扫一次陈旧报告。
+ */
+function resolveTimingDir(agentDir: string): string {
+  const dir = join(agentDir, 'timing')
+  if (!sweptDirs.has(dir)) {
+    sweptDirs.add(dir)
+    sweepStalePiSessionFiles(dir, TIMING_FILE_TTL_MS, Date.now(), PI_TIMING_FILE_SUFFIX)
+  }
+  return dir
+}
 
 /** 跨会话进程内单调计数：合成 toolCallId 必须全进程唯一——sink 按 toolCallId 归并是 run 级全局，
  * 并发子会话若各自从 1 计数就把撞号问题原样搬回来。 */
@@ -190,8 +220,8 @@ function resolveSessionManager(options: PiRunOptions): SessionManager {
   const store = options.sessionStore
   if (!store) return SessionManager.inMemory(options.cwd)
   mkdirSync(store.dir, { recursive: true })
-  if (!sweptSessionDirs.has(store.dir)) {
-    sweptSessionDirs.add(store.dir)
+  if (!sweptDirs.has(store.dir)) {
+    sweptDirs.add(store.dir)
     sweepStalePiSessionFiles(store.dir)
   }
   if (store.resumeSessionId) {
@@ -229,6 +259,14 @@ export async function* runPiSession({
 
   // 会话装配（切片⑦）：resume 定位失败在这里就抛（未发起任何网络调用），fail-loud 早于建会话。
   const sessionManager = resolveSessionManager(options)
+
+  /**
+   * 耗时归因仪表（issue #28 刀 D）：只主会话记（sessionStore 即主/子会话的既有判别式）——子会话
+   * 每条事件都经 subagentChannel 流到父会话侧按 parentToolCallId 分组归账，子会话自己再记一份就是
+   * 重复计账。报告只落 timing 目录，不进事件流，见 pi-run-timing.ts 的三条纪律。
+   */
+  const timingDir = options.sessionStore ? resolveTimingDir(options.agentDir) : undefined
+  const timing = timingDir ? createPiRunTimingRecorder() : undefined
 
   const { session } = await createSession({
     cwd: options.cwd,
@@ -340,12 +378,14 @@ export async function* runPiSession({
     const normalized = normalizeToolCallId(event)
     queue.push(normalized)
     if (isRecord(normalized)) accumulate(normalized)
+    timing?.observe(normalized)
     notify?.()
   })
   const unsubscribe = typeof maybeUnsubscribe === 'function' ? (maybeUnsubscribe as () => void) : undefined
   const unsubscribeChannel = options.subagentChannel?.subscribe((wrapped) => {
     queue.push(wrapped)
     accumulateSubagent(wrapped)
+    timing?.observe(wrapped.message, { agentId: wrapped.agentId, parentToolCallId: wrapped.parentToolCallId })
     notify?.()
   })
 
@@ -404,5 +444,10 @@ export async function* runPiSession({
     unsubscribe?.()
     unsubscribeChannel?.()
     if (!settled) await safeAbort(session)
+    // 耗时报告落在 finally：中止/失败的 run 同样出报告——最贵的那几条路径正是最该量的。
+    if (timing && timingDir) {
+      const report = timing.report(sessionManager.getSessionId())
+      if (!isEmptyPiRunTimingReport(report)) await writePiRunTimingReport({ dir: timingDir, report })
+    }
   }
 }

@@ -3,7 +3,7 @@
  * abort 传播、未支持面 fail-loud。真 createAgentSession 需打网络，不进单测（spike 已实测）。
  */
 import { describe, expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SessionManager } from '@mariozechner/pi-coding-agent'
@@ -554,6 +554,45 @@ describe('runPiSession 会话持久化与 resume（切片⑦）', () => {
     writeFileSync(join(dir, '2026-02-01T00-00-00_abcd1234-x.jsonl'), '{}\n')
     expect(findPiSessionFile(dir, 'abcd1234-x')).toBe(join(dir, '2026-02-01T00-00-00_abcd1234-x.jsonl'))
     expect(findPiSessionFile(dir, 'missing-id')).toBeUndefined()
+  })
+
+  test('主会话跑完落一份耗时报告，且报告不进事件流（issue #28 刀 D）', async () => {
+    const agentDir = mkdtempSync(join(tmpdir(), 'narracat-pi-agent-'))
+    const dir = join(agentDir, 'sessions')
+    const fake = makeFakeSession([
+      { type: 'agent_start' },
+      { type: 'message_start', message: { role: 'assistant' } },
+      { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: '正' } },
+      {
+        type: 'message_end',
+        message: { role: 'assistant', model: 'deepseek-v4-pro', stopReason: 'stop', usage: { input: 9, output: 4 } },
+      },
+    ])
+    const got = await collect(
+      runPiSession({
+        prompt: 'hi',
+        options: makeOptions({ agentDir, sessionStore: { dir } }),
+        createSession: fake.createSession,
+      }),
+    )
+    // 机器字段不入用户通道（ADR-0016）：报告只落盘，事件流里一条都没有
+    expect(got.some((message) => JSON.stringify(message).includes('prefillMs'))).toBe(false)
+
+    const reports = readdirSync(join(agentDir, 'timing'))
+    expect(reports.length).toBe(1)
+    const report = JSON.parse(readFileSync(join(agentDir, 'timing', reports[0]!), 'utf8'))
+    expect(report.schemaVersion).toBe(1)
+    expect(report.sessionId).toBe((fake.capturedArgs().sessionManager as SessionManager).getSessionId())
+    expect(report.main.modelCalls).toBe(1)
+    expect(report.main.model).toBe('deepseek-v4-pro')
+    expect(report.main.usage).toEqual({ inputTokens: 9, outputTokens: 4, cacheReadTokens: 0, cacheCreationTokens: 0 })
+  })
+
+  test('子会话（无 sessionStore）不记耗时：账已由父会话按 parentToolCallId 归一，不重复计', async () => {
+    const agentDir = mkdtempSync(join(tmpdir(), 'narracat-pi-agent-'))
+    const fake = makeFakeSession([{ type: 'agent_start' }])
+    await collect(runPiSession({ prompt: 'hi', options: makeOptions({ agentDir }), createSession: fake.createSession }))
+    expect(existsSync(join(agentDir, 'timing'))).toBe(false)
   })
 
   test('sweepStalePiSessionFiles：删超期 jsonl，留新鲜文件与非 jsonl', () => {
