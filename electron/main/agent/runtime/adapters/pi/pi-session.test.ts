@@ -423,6 +423,32 @@ describe('runPiSession 子会话事件通道（切片⑤）', () => {
     })
   })
 
+  test('子会话事件经 channel 归因到子 agent 自己的 span（issue #28 刀 D 的唯一数据入口）', async () => {
+    const agentDir = mkdtempSync(join(tmpdir(), 'narracat-pi-timing-sub-'))
+    const channel = createSubagentEventChannel()
+    const fake = makeFakeSession([
+      parentMessageEnd,
+      { type: 'channel:push', payload: wrapped({ type: 'message_start', message: { role: 'assistant' } }) },
+      { type: 'channel:push', payload: childMessageEnd({ input: 7, output: 3, cacheRead: 0, cacheWrite: 0 }) },
+    ])
+    await collectWithChannel(
+      channel,
+      makeOptions({ subagentChannel: channel, agentDir, sessionStore: { dir: join(agentDir, 'sessions') } }),
+      fake.createSession,
+    )
+
+    const timingDir = join(agentDir, 'timing')
+    const report = JSON.parse(readFileSync(join(timingDir, readdirSync(timingDir)[0]!), 'utf8'))
+    // 子会话事件在 channel 上是包了一层的 PiSubagentEventMessage：接线漏掉解包（传 wrapped 而非
+    // wrapped.message）时，recorder 只看见未知事件，下面三条断言全塌——刀 D 的子 agent 归因正是
+    // 靠这一层，坏了整份报告只剩主会话，且不报错。
+    expect(report.subagents.length).toBe(1)
+    expect(report.subagents[0].agentId).toBe('chapter-writer')
+    expect(report.subagents[0].parentToolCallId).toBe('tc-1')
+    expect(report.subagents[0].modelCalls).toBe(1)
+    expect(report.subagents[0].usage).toEqual({ inputTokens: 7, outputTokens: 3, cacheReadTokens: 0, cacheCreationTokens: 0 })
+  })
+
   test('子会话失败路径（触 maxTurns / 报错 / 被中止，全都不发 run_end）token 仍并账——最贵的三条路径不漏计', async () => {
     for (const failure of [
       // 触回合上限：桥只补 narracat_pi_max_turns，无 run_end
