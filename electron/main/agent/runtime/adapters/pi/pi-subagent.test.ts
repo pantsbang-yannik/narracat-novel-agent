@@ -22,8 +22,8 @@ const definitions: Record<string, EngineAgentDefinition> = {
 }
 
 /** pi 0.73.1 的 assistant 收笔消息形态（本映射只取 content 里的 text 块）。 */
-function assistantMessageEnd(text: string): Record<string, unknown> {
-  return { type: 'message_end', message: { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text }] } }
+function assistantMessageEnd(text: string, stopReason = 'stop'): Record<string, unknown> {
+  return { type: 'message_end', message: { role: 'assistant', stopReason, content: [{ type: 'text', text }] } }
 }
 
 type FakeRunSession = CreateTaskToolArgs['runSession']
@@ -70,9 +70,10 @@ function runTool(
   toolCallId: string,
   params: Record<string, unknown>,
   signal?: AbortSignal,
-): Promise<{ content: Array<{ type: string; text?: string }> }> {
+): Promise<{ content: Array<{ type: string; text?: string }>; details?: unknown }> {
   return tool.execute(toolCallId, params as never, signal, undefined, {} as never) as Promise<{
     content: Array<{ type: string; text?: string }>
+    details?: unknown
   }>
 }
 
@@ -239,6 +240,46 @@ describe('createTaskTool 派发', () => {
     const { tool } = makeTaskTool({ runSession: makeScriptedSession([{ type: 'agent_start' }]).runSession })
     const result = await runTool(tool, 'tc-1', { subagent_type: 'chapter-writer', prompt: '写' })
     expect(result.content[0].text).toBe('（子 agent 未产出文本）')
+  })
+
+  test('子会话 stopReason=length：结果带截断说明并保留已产出部分，details 打异常终态标记', async () => {
+    const { tool } = makeTaskTool({
+      runSession: makeScriptedSession([assistantMessageEnd('写到一半就被截断了', 'length')]).runSession,
+    })
+    const result = await runTool(tool, 'tc-1', { subagent_type: 'chapter-writer', prompt: '写' })
+    expect(result.content[0].text).toContain('输出上限')
+    expect(result.content[0].text).toContain('写到一半就被截断了')
+    expect(result.details).toEqual({ narracatSubagentAbnormalStop: 'length' })
+  })
+
+  test('子会话 stopReason=error 且零文本：结果明确区别于「正常但没说话」', async () => {
+    const { tool } = makeTaskTool({
+      runSession: makeScriptedSession([
+        { type: 'message_end', message: { role: 'assistant', stopReason: 'error', errorMessage: '502', content: [] } },
+      ]).runSession,
+    })
+    const result = await runTool(tool, 'tc-1', { subagent_type: 'chapter-writer', prompt: '写' })
+    expect(result.content[0].text).not.toBe('（子 agent 未产出文本）')
+    expect(result.content[0].text).toContain('异常终止')
+    expect(result.content[0].text).toContain('（子 agent 未产出文本）')
+    expect(result.details).toEqual({ narracatSubagentAbnormalStop: 'error' })
+  })
+
+  test('异常终态粘住：后续正常收笔不把它洗回成功（这一遍交付已不可信）', async () => {
+    const { tool } = makeTaskTool({
+      runSession: makeScriptedSession([assistantMessageEnd('半章', 'length'), assistantMessageEnd('补了一句', 'stop')])
+        .runSession,
+    })
+    const result = await runTool(tool, 'tc-1', { subagent_type: 'chapter-writer', prompt: '写' })
+    expect(result.content[0].text).toContain('输出上限')
+    expect(result.details).toEqual({ narracatSubagentAbnormalStop: 'length' })
+  })
+
+  test('正常收笔零文本不误报异常终止：文案与 details 均与既有行为一致', async () => {
+    const { tool } = makeTaskTool({ runSession: makeScriptedSession([assistantMessageEnd('')]).runSession })
+    const result = await runTool(tool, 'tc-1', { subagent_type: 'chapter-writer', prompt: '写' })
+    expect(result.content[0].text).toBe('（子 agent 未产出文本）')
+    expect(result.details).toBeUndefined()
   })
 
   test('结果回流：gate 反馈追加在文本尾部（Task 6 质量门缝，本 Task 以注入假 gate 覆盖）', async () => {
