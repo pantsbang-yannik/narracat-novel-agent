@@ -22,6 +22,7 @@
     "ops:status": "node scripts/ops-status.mjs",
     "ops:issues": "node scripts/ops-issues.mjs",
     "ops:check": "node scripts/ops-check.mjs",
+    "ops:write-timing": "node scripts/ops-write-timing.mjs",
     "perf:baseline": "tsx scripts/performance-baseline.ts",
     "check:design": "node scripts/check-design-system.mjs",
     "check:architecture": "node scripts/check-architecture.mjs --enforce && node scripts/check-prose-blocks.mjs && node scripts/check-no-native-details.mjs",
