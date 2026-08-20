@@ -12,6 +12,18 @@
 
 产品路线以下方 **Next（产品路线图 · 2026-07-12 统筹版）** 为准：四条泳道 = A 花的所有权（用户编辑）/ B 花的表达权（可配置底座）/ C 尺（评价与验证）/ D 账房（记忆与资产底座）。战略层以 `docs/COMPASS.md` 为准，执行入口 `/next-issue`。
 
+**2026-08-20（#38：损坏项目给作者出路而不是 IPC 黑话，分支 `fix/38-invalid-project-guidance` = `2e46507`，未合并）**：作者录入角色后撞到红条 `Error invoking remote method 'novel:refresh-status': Error: 缺少 .narracat/config.yaml 或 .narracat/state.yaml`。排查结论是**文件并没丢**（复现机四个项目文件全在，也排除了写入竞态——`state-sync.ts` 全程原地覆盖、不存在句柄短暂消失的窗口），真正的问题是三条不需要复现就能修的确定性缺陷。
+
+**① 入口没拦**：书架明知这本书坏了、卡上都标了红，`<Link>` 仍覆盖整卡照常可点，进去必撞 `aggregateNovelStatusSnapshot` 第一行。改成点击弹说明浮层。**主动作定为「打开所在文件夹」而不是删除**——invalid 很可能是误判（文件夹被移动/重命名、外置盘没插、config.yaml 被误删而正文还在），这种时候引导作者删东西是灾难。
+
+**②「从书架移除」只在真能生效时才给**：书架 = `novelRootDir` 直接子目录 + 配置里的最近路径，两者合并。root 下的项目摘掉最近路径**下次扫描照样回来**，给一个点了不生效的按钮比不给更糟；这类项目改为把删除入口指回卡片「更多」。移除本身复用既有 `deleteNovelProject`——查下来它对 invalid 项目本就只摘书架条目、不 trash 任何文件，语义正合适，无需新造 IPC。
+
+**③ 黑话与可观测性**：新增 `stripIpcErrorPrefix` 剥掉 `Error invoking remote method '…'` 外壳（这段实现细节还把唯一有用的信息挤到了后面）；项目文件不完整时给人话 +「返回书架」，不再给一个重试一万次都是同一个错的按钮；主进程抛错前补 `projectPath` 与两个文件各自的存在性到日志——**只有一句静态文案、不带路径，正是本次无法从现场倒推的直接原因**，面向作者的文案保持不变。
+
+**两条防静默失配的守卫**：判据文案收成 `shared/lib/ipc-error.ts` 常量三处共用（原先主进程里重复写了两份），各写各的字符串会在改动一侧时静默失配、损坏态退回老样子且无测试会红；渲染端用 `window.electron?.revealProjectFolder?.()` 调 IPC，**preload 漏登记会完全静默**（可选链吞掉，typecheck 也拦不住，因为 ipc.d.ts 声明是齐的），故补 preload 三处登记守卫。验证：typecheck / 全量 **3055 pass 0 fail**（对 main 基线 +12 tests +3 files）/ check:design / check:architecture / build 全绿。
+
+**待办**：真机 dogfood（与 #37 一起）。原报告里「刚录入一个角色之后」那条链仍未复现——等 ③ 的日志上线后，下次再撞就能一眼看出是哪一步把非项目根的路径当 projectPath 传了下去。
+
 **2026-08-18（社区第三批：custom 渠道支持 OpenAI 协议，PR #13 = #5 刀 1，`4699fb2`）**：@zfengChen 的提案 #5 拆三刀后的第一刀落地。custom 渠道新增 `wire` 字段（`anthropic` 默认 / `openai`），主链走 pi-ai 原生 `openai-completions`（零新依赖），模型清单双头拉取（`Bearer {base}/models` vs `x-api-key {base}/v1/models`），wire 贯通配置归一化 / 验证快照 / 会话指纹。**默认行为零变化**——`normalizeWire` 把 openai 锁死在 custom 渠道，内置四家含手改配置文件一律回落 anthropic，错配拦在入口而非事后补救。
 
 **两轮 review。第一轮抓到的阻断项是这条记录的重点**：切协议按钮**实质点不动，还会把磁盘上已落盘的 wire 静默改回去**。根因在 `src/lib/settings-config.ts` 的草稿保护——`toDisplay` 把 providers 整个换回本地草稿（原为防「用户正在打字的 baseUrl 被落盘结果吃掉」），而 `onModelWireChange` 从不更新草稿里的 wire，这层保护就变成了回滚；紧接着 `mergeProviderDraft` 在「测试连接」时把整个 provider 对象从草稿写回 persisted，把磁盘上正确的 openai 也覆盖掉。**本质是把离散的即时落盘字段（wire，语义同「设为主力」）塞进了为打字输入设计的保护圈**。采纳修法 2（字段级保护：只回护 `baseUrl`），一次修掉两处。**贡献者的根因交代比修复本身值钱**：这刀是从他 fork 的完整实现里提取的，原版有 `displayProviders:'saved'` 防这类回滚，提取时被当成动态渠道的附属品剔掉了——**从大实现里切片时被剥离的保护件，是回归的高发区**，以后审同类提取式 PR 要专门过一遍。
