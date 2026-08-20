@@ -364,6 +364,8 @@ export type PublishPackDraftResult =
 
 export interface ElectronApi {
   ping: () => Promise<string>
+  /** 在系统文件管理器中定位项目文件夹（损坏项目的自救入口，#38）。 */
+  revealProjectFolder: (projectPath: string) => Promise<void>
   checkReleaseGuard: () => Promise<ReleaseGateVerdict>
   getUpdaterState: () => Promise<UpdaterState>
   checkForUpdates: () => Promise<void>

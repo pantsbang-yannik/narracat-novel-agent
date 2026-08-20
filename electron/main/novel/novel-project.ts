@@ -1,3 +1,4 @@
+import { NOVEL_PROJECT_INCOMPLETE_MESSAGE } from '@shared/lib/ipc-error'
 import type { Dirent } from 'node:fs'
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
@@ -32,7 +33,7 @@ import type {
   UpdateNovelProjectMetadataInput,
 } from '@shared/types/novel'
 
-const missingProjectProblem = '缺少 .narracat/config.yaml 或 .narracat/state.yaml'
+const missingProjectProblem = NOVEL_PROJECT_INCOMPLETE_MESSAGE
 const corruptedStructureProblem = '全书结构数据损坏：章卷映射缺失或不完整，请让 Agent 重新同步全书结构。'
 const reservedBibleDirectoryNames = new Set([
   'characters',
