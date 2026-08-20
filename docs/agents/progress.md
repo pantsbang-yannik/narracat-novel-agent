@@ -12,7 +12,7 @@
 
 产品路线以下方 **Next（产品路线图 · 2026-07-12 统筹版）** 为准：四条泳道 = A 花的所有权（用户编辑）/ B 花的表达权（可配置底座）/ C 尺（评价与验证）/ D 账房（记忆与资产底座）。战略层以 `docs/COMPASS.md` 为准，执行入口 `/next-issue`。
 
-**2026-08-20（#37 刀①：durable 事件路径取证，分支 `fix/37-durable-path-forensics` = `554705d`，未合并）**：Agent 过程流频繁「已跳过 调用 read」，取证发现 read 失败率 **25.6%（50/195）**，但错误里的路径被我们自己的脱敏（`agent-durable-events.ts` 的 `ABSOLUTE_PATH`）整段抹成 `[本机路径]`——**根因不可查这件事本身是第一层问题**。改法：脱敏**之前**先把已知根相对化成 `<项目>/…` / `<引擎>/…`，根以上不落盘、根以外照旧整段抹。
+**2026-08-20（#37 刀①：durable 事件路径取证 + 换 pi 遗留契约清理，PR #41）**：Agent 过程流频繁「已跳过 调用 read」，取证发现 read 失败率 **25.6%（50/195）**，但错误里的路径被我们自己的脱敏（`agent-durable-events.ts` 的 `ABSOLUTE_PATH`）整段抹成 `[本机路径]`——**根因不可查这件事本身是第一层问题**。改法：脱敏**之前**先把已知根相对化成 `<项目>/…` / `<引擎>/…`，根以上不落盘、根以外照旧整段抹。
 
 **issue 原方案只做脱敏，实测会留 1/3 盲区**：50 次失败里 33 次 ENOENT 的错误串自带路径，另外 **17 次 EISDIR 的错误串根本不含路径**（`EISDIR: illegal operation on a directory, read`，到此为止），唯一带路径的是 `tool.started` 的 `input`，而 sink 的 `tools` Map 只存 `{messageId,toolName,title}`、input 被丢弃。故落盘事件新增可选 `target`：在 started 时取出路径、相对化后存进 live 投影，收尾事件再写出。**只改脱敏对 EISDIR 那一类无效**，会再来一轮。
 
@@ -31,6 +31,21 @@
 **给 ③ 的第一条线索**：本次跑章 read 失败 5 次 = 3 次 EISDIR（错误串不带路径）+ 2 次 ENOENT 指向 `<项目>/.narracat/staging/ch-0XX.md`，**agent 在读还没生成的 staging 文件**。注意本批 read 失败率 10.4%（43/5）与历史 25.6%（145/50）不可直接对比——本次改动没有触碰 read 行为，差异不能归因于它。
 
 **待办**：#37 的 ②（过程流区分「跳过」与「失败」）与 ③（系统性打空的根因）。③ 现在有了带路径的取证数据，但仍**不能凭猜改 prompt**——需要更多样本确认 staging 那条线索是不是主因。
+**2026-08-20（#38：损坏项目给作者出路而不是 IPC 黑话，PR #40 已合 main）**：作者录入角色后撞到红条 `Error invoking remote method 'novel:refresh-status': Error: 缺少 .narracat/config.yaml 或 .narracat/state.yaml`。排查结论是**文件并没丢**（复现机四个项目文件全在，也排除了写入竞态——`state-sync.ts` 全程原地覆盖、不存在句柄短暂消失的窗口），真正的问题是三条不需要复现就能修的确定性缺陷。
+
+**① 入口没拦**：书架明知这本书坏了、卡上都标了红，`<Link>` 仍覆盖整卡照常可点，进去必撞 `aggregateNovelStatusSnapshot` 第一行。改成点击弹说明浮层。**主动作定为「打开所在文件夹」而不是删除**——invalid 很可能是误判（文件夹被移动/重命名、外置盘没插、config.yaml 被误删而正文还在），这种时候引导作者删东西是灾难。
+
+**②「从书架移除」只在真能生效时才给**：书架 = `novelRootDir` 直接子目录 + 配置里的最近路径，两者合并。root 下的项目摘掉最近路径**下次扫描照样回来**，给一个点了不生效的按钮比不给更糟；这类项目改为把删除入口指回卡片「更多」。移除本身复用既有 `deleteNovelProject`——查下来它对 invalid 项目本就只摘书架条目、不 trash 任何文件，语义正合适，无需新造 IPC。
+
+**③ 黑话与可观测性**：新增 `stripIpcErrorPrefix` 剥掉 `Error invoking remote method '…'` 外壳（这段实现细节还把唯一有用的信息挤到了后面）；项目文件不完整时给人话 +「返回书架」，不再给一个重试一万次都是同一个错的按钮；主进程抛错前补 `projectPath` 与两个文件各自的存在性到日志——**只有一句静态文案、不带路径，正是本次无法从现场倒推的直接原因**，面向作者的文案保持不变。
+
+**两条防静默失配的守卫**：判据文案收成 `shared/lib/ipc-error.ts` 常量三处共用（原先主进程里重复写了两份），各写各的字符串会在改动一侧时静默失配、损坏态退回老样子且无测试会红；渲染端用 `window.electron?.revealProjectFolder?.()` 调 IPC，**preload 漏登记会完全静默**（可选链吞掉，typecheck 也拦不住，因为 ipc.d.ts 声明是齐的），故补 preload 三处登记守卫。验证：typecheck / 全量 **3055 pass 0 fail**（对 main 基线 +12 tests +3 files）/ check:design / check:architecture / build 全绿。
+
+**dogfood 校正了 issue 的一个前提（2026-08-20 验收通过）**：issue 说「书架放行 invalid 项目」，实际更精确——`scanRootChildren` 只放行 `isNarraCatProject` 为真的目录，所以 `novelRootDir` 下**缺文件**的坏目录压根不会进书架。invalid 卡片有两个来源，行为不同：①**缺 config/state**（`isNarraCatProject` 假）→ 被 root 扫描过滤 → 只可能来自 `recentNovelPaths` → 移除有效；②**文件在但读不出**（yaml 损坏，`loadSummarySafely` catch 分支同样吐 `status:'invalid'`）→ `isNarraCatProject` 真 → **会被 root 扫描列出** → 在 root 下时移除确实无效。四种组合逐个核过，`canRemoveFromLibrary` 的判据都对——**第②类正是 `canRemove=false` 分支存在的理由**，不能因为「invalid 项目总能移除」的直觉把它删掉。
+
+**造 dogfood 数据的教训**：第一次把测试用的坏项目建在 `novelRootDir` 下，结果它被上面那条过滤规则挡住、根本不显示，白让产品主人找了一轮。**造完测试数据必须先离线跑一遍消费方**（这里是 `scanNovelProjects`）证明它真会出现，再叫人去看——否则就是把未经验证的东西当成已完成交付。
+
+**dogfood 结果**：五步验收全过（卡片人话文案 / 点击不跳工作台而弹浮层 / 「打开所在文件夹」/ 「从书架移除」后卡片消失且文件夹仍在 / 原始文件名不外露）。原报告里「刚录入一个角色之后」那条链仍未复现——等 ③ 的日志上线后，下次再撞就能一眼看出是哪一步把非项目根的路径当 projectPath 传了下去。
 
 **2026-08-18（社区第三批：custom 渠道支持 OpenAI 协议，PR #13 = #5 刀 1，`4699fb2`）**：@zfengChen 的提案 #5 拆三刀后的第一刀落地。custom 渠道新增 `wire` 字段（`anthropic` 默认 / `openai`），主链走 pi-ai 原生 `openai-completions`（零新依赖），模型清单双头拉取（`Bearer {base}/models` vs `x-api-key {base}/v1/models`），wire 贯通配置归一化 / 验证快照 / 会话指纹。**默认行为零变化**——`normalizeWire` 把 openai 锁死在 custom 渠道，内置四家含手改配置文件一律回落 anthropic，错配拦在入口而非事后补救。
 

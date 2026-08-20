@@ -476,6 +476,14 @@ export function registerNovelIpcHandlers(): void {
     return runProjectMutation(request.projectPath, () => updateNovelProjectMetadata(request))
   })
 
+  // 损坏项目的自救入口（#38）：invalid 多半是文件被移动/重命名或磁盘没连接，
+  // 让作者自己打开文件夹看一眼，比引导他删东西安全得多。
+  ipcMain.handle('novel:reveal-folder', async (_event, input: unknown) => {
+    const projectPath = typeof input === 'string' ? input.trim() : ''
+    if (!projectPath) throw new Error('缺少项目路径。')
+    shell.showItemInFolder(projectPath)
+  })
+
   ipcMain.handle('novel:delete-project', async (_event, input: unknown) => {
     const deleteInput = readDeleteNovelProjectInput(input)
     return runProjectMutation(deleteInput.projectPath, async () => {

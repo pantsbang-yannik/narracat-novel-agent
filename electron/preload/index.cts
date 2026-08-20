@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 const api = {
   ping: (): Promise<string> => ipcRenderer.invoke('ping'),
+  revealProjectFolder: (projectPath: string) => ipcRenderer.invoke('novel:reveal-folder', projectPath),
   checkReleaseGuard: () => ipcRenderer.invoke('release-guard:check'),
   getUpdaterState: () => ipcRenderer.invoke('updater:get-state'),
   checkForUpdates: () => ipcRenderer.invoke('updater:check'),

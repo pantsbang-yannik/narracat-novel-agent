@@ -10,6 +10,7 @@ import {
   LibraryFilterBar,
   LibraryFilteredEmptyState,
   LibraryHomeHero,
+  LibraryInvalidProjectPanel,
   LibraryProjectDeletePanel,
   LIBRARY_PROJECT_METADATA_DIALOG_CONTENT_CLASS,
   LibraryNavBrand,
@@ -229,6 +230,73 @@ describe('LibraryRoute presentation', () => {
     expect(filterLibraryProjects(projects, { status: 'all', genre: '未分类' }).map((project) => project.id)).toEqual([
       'legacy',
     ])
+  })
+
+
+  test('an invalid project card no longer links into a workbench that must fail (#38)', () => {
+    // 书架明知这本书坏了、卡上都标了红，仍旧让作者点进去，然后用一句开发黑话糊他脸上。
+    // 入口必须先拦住：进到一个什么都读不出来的工作台对作者零价值。
+    const invalid = { ...baseProject, status: 'invalid' as const, problem: '缺少 .narracat/config.yaml 或 .narracat/state.yaml' }
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <LibraryProjectCard project={invalid} />
+      </MemoryRouter>,
+    )
+
+    expect(html).not.toContain('/workbench?project=')
+    expect(html).toContain('data-library-invalid-trigger="true"')
+    // 原始文件名不糊到作者脸上。
+    expect(html).not.toContain('.narracat/config.yaml')
+  })
+
+
+  test('the broken-project notice leads with opening the folder, not with deleting', () => {
+    // invalid 多半是误判——文件夹被移动、外置盘没插、config.yaml 被误删而正文还在。
+    // 主动作必须是「去看一眼」，不能引导作者先删东西。
+    const invalid = { ...baseProject, status: 'invalid' as const }
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <Dialog open>
+        <LibraryInvalidProjectPanel
+          canRemove
+          project={invalid}
+          removing={false}
+          onCancel={() => {}}
+          onRemove={() => {}}
+          onReveal={() => {}}
+        />
+        </Dialog>
+      </MemoryRouter>,
+    )
+
+    expect(html).toContain('data-library-invalid-reveal="true"')
+    expect(html).toContain('打开所在文件夹')
+    expect(html).toContain('data-library-invalid-remove="true"')
+    expect(html).not.toContain('.narracat/config.yaml')
+  })
+
+  test('hides removal when the project sits inside the novel root, where removing cannot work', () => {
+    // root 下的项目摘掉最近路径也没用，下次扫描照样出现。这时改为把删除入口指回「更多」，
+    // 而不是给一个点了不生效的按钮。
+    const invalid = { ...baseProject, status: 'invalid' as const }
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <Dialog open>
+        <LibraryInvalidProjectPanel
+          canRemove={false}
+          project={invalid}
+          removing={false}
+          onCancel={() => {}}
+          onRemove={() => {}}
+          onReveal={() => {}}
+        />
+        </Dialog>
+      </MemoryRouter>,
+    )
+
+    expect(html).not.toContain('data-library-invalid-remove="true"')
+    expect(html).toContain('更多')
+    expect(html).toContain('data-library-invalid-reveal="true"')
   })
 
   test('renders project cards in the desktop book-cover layout without redundant open copy', () => {
@@ -491,7 +559,10 @@ describe('LibraryRoute presentation', () => {
       </MemoryRouter>,
     )
 
-    expect(html).toContain('缺少 config.yaml')
+    // #38：invalid 仍然可见且仍排在最后，但卡上不再露 `缺少 config.yaml` 这类文件名，
+    // 只留一句人话；缺什么、能怎么办放进点击后的说明浮层。
+    expect(html).not.toContain('缺少 config.yaml')
+    expect(html).toContain('项目文件不完整')
     expect(html.match(/loading="eager"/g) ?? []).toHaveLength(3)
     expect(html).not.toContain('loading="lazy"')
     expect(html.indexOf('断点')).toBeLessThan(html.indexOf('可写'))
