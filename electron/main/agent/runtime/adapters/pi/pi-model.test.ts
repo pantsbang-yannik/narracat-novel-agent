@@ -5,7 +5,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { AppConfig, ModelPoolEntry } from '@shared/types/config'
 import { DEFAULT_PROVIDER_SETTINGS, POOL_DEFAULT_FIELDS } from '@shared/types/config'
-import { createPiModel, resolvePiModelAlias } from './pi-model.ts'
+import { TARGET_MAX_OUTPUT_TOKENS, createPiModel, effectivePiMaxTokens, resolvePiModelAlias } from './pi-model.ts'
 
 function makeConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   return {
@@ -41,8 +41,21 @@ describe('createPiModel', () => {
     expect(model.api).toBe('anthropic-messages')
     expect(model.baseUrl).toBe('https://api.deepseek.com/anthropic')
     expect(model.contextWindow).toBe(200_000)
-    // 对齐 SDK 路径实际输出上限（CLI 默认 32000）：8192 会截断章节长输出（生产接线门前项①）
-    expect(model.maxTokens).toBe(32_000)
+    // 断言**实发值**而不是 Model 上的存值：上游 pi-ai 会先除以 3（issue #35），
+    // 原来这里只盯存值 32000，于是「意图 32000、实发 10666」悄悄跑了很久都没人发现。
+    expect(effectivePiMaxTokens(model.maxTokens)).toBe(TARGET_MAX_OUTPUT_TOKENS)
+    expect(TARGET_MAX_OUTPUT_TOKENS).toBe(32_000)
+  })
+
+  test('实发 max_tokens 补偿上游除以 3（issue #35 的唯一护栏）', () => {
+    const model = createPiModel(makeConfig())
+    // 复刻 pi-ai@0.73.1 dist/providers/anthropic.js:663 的算式：
+    //   max_tokens: options?.maxTokens || (model.maxTokens / 3) | 0
+    // sdk.js 与 agent-loop.js 都不透传 options.maxTokens，所以恒走右边这支。
+    const actuallySent = (model.maxTokens / 3) | 0
+    expect(actuallySent).toBe(TARGET_MAX_OUTPUT_TOKENS)
+    // 上游哪天不再除 3，这条会红——那就是该按 pi-model.ts 的拆除说明书改回去的信号。
+    expect(effectivePiMaxTokens(model.maxTokens)).toBe(actuallySent)
   })
 
   test('createPiModel 从主力槽解析 id/provider/baseUrl', () => {

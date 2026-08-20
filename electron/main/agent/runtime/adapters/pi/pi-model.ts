@@ -16,7 +16,36 @@ const DEFAULT_CONTEXT_WINDOW = 200_000
 /** 对齐 SDK 路径的实际输出上限（sdk-runner 未设输出 env，走 Claude CLI 默认 32000）——A/B 单变量
  * 纪律：8192 会截断章节写作长输出，是 SDK 路径没有的新变量；超限仍触发 stopReason='length'，
  * 由事件映射 fail-loud（生产接线门前项①）。 */
-const DEFAULT_MAX_TOKENS = 32_000
+export const TARGET_MAX_OUTPUT_TOKENS = 32_000
+
+/**
+ * 上游补偿系数（issue #35）：`@mariozechner/pi-ai@0.73.1` 的 `buildParams`
+ * （`dist/providers/anthropic.js:663`）是
+ *
+ *     max_tokens: options?.maxTokens || (model.maxTokens / 3) | 0
+ *
+ * 而 `pi-coding-agent` 的 `sdk.js` 与 `pi-agent-core` 的 `agent-loop.js` **都不透传**
+ * `options.maxTokens`（两处 grep 零命中），于是实发恒等于 `model.maxTokens / 3`。
+ * 上面那句「对齐 32000」因此一直只兑现了 10666——比它想躲开的 8192 高不了多少，
+ * 冷改整章（正文 + thinking + 收尾说明）稳定贴顶，就是 #29 高频截断的根因。
+ *
+ * 这里存 3 倍，让**实发**等于 TARGET。这是给上游行为打的桥，不是本仓要长期持有的能力。
+ *
+ * ## 拆除说明书
+ *
+ * - 钉死版本：`@mariozechner/pi-ai@0.73.1`（package.json 精确版本，非 range）
+ * - 上游修复后如何确认：读 `dist/providers/anthropic.js` 的 `buildParams`，若 `/ 3` 消失，
+ *   或 sdk / agent-loop 开始透传 `options.maxTokens`——**必须立刻改回直接用 TARGET**，
+ *   否则 96000 会被原样发给 provider，可能直接被拒。
+ * - 怎么复测：`pi-model.test.ts` 里「实发 max_tokens」那条用例复刻了上游算式，改坏即红。
+ */
+const PI_UPSTREAM_MAX_TOKENS_DIVISOR = 3
+const DEFAULT_MAX_TOKENS = TARGET_MAX_OUTPUT_TOKENS * PI_UPSTREAM_MAX_TOKENS_DIVISOR
+
+/** 复刻 pi-ai@0.73.1 `buildParams` 的算式，供测试与排查核对「配置值 → 实发值」。 */
+export function effectivePiMaxTokens(modelMaxTokens: number): number {
+  return (modelMaxTokens / PI_UPSTREAM_MAX_TOKENS_DIVISOR) | 0
+}
 const ANTHROPIC_OFFICIAL_BASE_URL = 'https://api.anthropic.com'
 
 /** 可选 wire 支持的 Model 泛型：anthropic-messages（默认）或 openai-completions（custom 渠道可选）。 */
