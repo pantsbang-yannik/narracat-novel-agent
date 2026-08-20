@@ -20,7 +20,17 @@
 
 **测试覆盖的边界**：兄弟目录前缀误伤（`/novel-x` 不得吃掉 `/novel-x-backup`，最初实现真踩了，落盘会变成 `<项目>-backup`）、Windows 两侧分隔符不一致（配置里 `/`、Node 错误串里 `\`，按字面匹配整条漏掉 = Windows 上取证等于没做）、项目外路径仍被抹、存量事件缺 `target` 字段仍可读。验证：typecheck / 全量 **3053 pass 0 fail**（对 main 基线 3043/301 为 **+10 tests +2 files**，核对过文件数不是静默跳过）/ check:design / check:architecture / build 全绿；启动烟测正常，dev 下引擎根解析为真实存在目录并验证相对化生效。
 
-**待办**：真机 dogfood 跑一章拿真实路径分布，才能进 #37 的 ②（过程流区分「跳过」与「失败」）与 ③（25% 打空的系统性根因）。③ 明确**不能凭猜改 prompt**。
+**真机 dogfood 打脸（2026-08-20）：跑完一章，target 字段一个都没有，而全部单测照样绿。** 根因是字段名搞错——最初照搬 `tool-phrase.ts` 的 `['file_path','filePath']`，那是 claude-sdk 时代的契约（工具名还是大写 `Read`）；换 pi 后工具名变小写、参数名变 `path`，`extractToolTargetPath` 于是永远返回 undefined。取证走 pi 的 `sessions/*.jsonl`（工具调用的完整入参本来就落在那里）：`read {path,offset}` / `write {path,content}` / `find {path,pattern}` / `grep {pattern,path,context}`，四个工具一律 `path`，无一使用 `file_path`。
+
+**最刺眼的一点**：`pi-tool-guard.ts` 第 45 行注释早就写着「路径字段受圈禁的 pi 内置工具（**字段全叫 path**）」，同文件的 `SDK_TO_PI_TOOL_NAME` 就是权威映射表（含 `Glob → find` 这个改名）。**先读那个文件，这个 bug 一个都不会有。**「复用同仓已有常量」看起来是对的工程直觉，实际是从一份过期契约里抄答案；而测试与实现共用同一个错误假设（用例全用 `{file_path}` 构造），所以全绿也挡不住。修复同时把 sink 测试的 input 改成 `{path}`——原来的形态在真实系统里根本不存在，测试等于在验证虚构场景。
+
+**同源副产品（已一并修）**：`tool-phrase.ts` 的 `Read`/`Write`/`Grep`/`Glob` 四个 case 在 pi 下全是死代码，工具卡文案静默退化——作者看到的不是「读取 config.yaml」而是 default 分支兜底吐的 **`read config.yaml`**（英文工具标识直接糊脸）。旧的大写 case 保留（fall-through），因为存量会话事件里存的是 SDK 名，重看旧对话仍要正确渲染；另补 `ls` 与 `AskUserQuestion`。守卫测试第一版只挡「调用 <name>」，**漏掉了「<name> <值>」这种形态，红一次才发现**——退化不止一种长相。
+
+**最终真机验证通过**：`find → <项目>`、`read → <项目>/manuscript/vol-01/ch-001.md`、`read → <项目>/outline/vol-01/ch-001.md`、`find → <项目>/.narracat/manuscript-drafts`；`bash → 无 target`（正确，它用 command 不用 path）。相对化同批验证：`ENOENT ... access '<项目>/.narracat/staging/ch-019.md'`。
+
+**给 ③ 的第一条线索**：本次跑章 read 失败 5 次 = 3 次 EISDIR（错误串不带路径）+ 2 次 ENOENT 指向 `<项目>/.narracat/staging/ch-0XX.md`，**agent 在读还没生成的 staging 文件**。注意本批 read 失败率 10.4%（43/5）与历史 25.6%（145/50）不可直接对比——本次改动没有触碰 read 行为，差异不能归因于它。
+
+**待办**：#37 的 ②（过程流区分「跳过」与「失败」）与 ③（系统性打空的根因）。③ 现在有了带路径的取证数据，但仍**不能凭猜改 prompt**——需要更多样本确认 staging 那条线索是不是主因。
 
 **2026-08-18（社区第三批：custom 渠道支持 OpenAI 协议，PR #13 = #5 刀 1，`4699fb2`）**：@zfengChen 的提案 #5 拆三刀后的第一刀落地。custom 渠道新增 `wire` 字段（`anthropic` 默认 / `openai`），主链走 pi-ai 原生 `openai-completions`（零新依赖），模型清单双头拉取（`Bearer {base}/models` vs `x-api-key {base}/v1/models`），wire 贯通配置归一化 / 验证快照 / 会话指纹。**默认行为零变化**——`normalizeWire` 把 openai 锁死在 custom 渠道，内置四家含手改配置文件一律回落 anthropic，错配拦在入口而非事后补救。
 
