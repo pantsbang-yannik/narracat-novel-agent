@@ -1,3 +1,5 @@
+import { TOOL_PATH_INPUT_KEYS } from '@shared/lib/agent-path-scrub'
+
 export interface ToolPhrase {
   label: string
   loadingLabel: string
@@ -178,7 +180,7 @@ export function getToolPhrase(toolName: string, rawInput?: ToolInput): ToolPhras
 
   switch (toolName) {
     case 'Read': {
-      const path = firstString(input, ['file_path', 'filePath'])
+      const path = firstString(input, [...TOOL_PATH_INPUT_KEYS])
       if (!path) return phrase('读取文件')
 
       const offset = typeof input.offset === 'number' ? input.offset : undefined
@@ -191,7 +193,7 @@ export function getToolPhrase(toolName: string, rawInput?: ToolInput): ToolPhras
     }
 
     case 'Edit': {
-      const path = firstString(input, ['file_path', 'filePath'])
+      const path = firstString(input, [...TOOL_PATH_INPUT_KEYS])
       const name = path ? filename(path) : '文件'
       const diff = diffStats(input)
       if (!diff) return phrase(`编辑 ${name}`)
@@ -203,7 +205,7 @@ export function getToolPhrase(toolName: string, rawInput?: ToolInput): ToolPhras
     }
 
     case 'Write': {
-      const path = firstString(input, ['file_path', 'filePath'])
+      const path = firstString(input, [...TOOL_PATH_INPUT_KEYS])
       const name = path ? filename(path) : '文件'
       const content = input.content
       if (typeof content === 'string' && content.length > 0) {
