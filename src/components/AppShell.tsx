@@ -18,13 +18,15 @@ export function AppShell({ navStart, navCenter, navEnd, children }: AppShellProp
       {/* 顶部 nav：只承担拖拽和轻量导航，不再作为一块有边框的独立 surface。
           左右 padding 平台感知：mac 给左上角红绿灯让位（--titlebar-inset-left），
           Windows 给右上角系统 caption 按钮让位（--titlebar-inset-right），
-          再加 0.75rem 呼吸位——caption 与 navEnd 图标只隔让位线会读成一团（视觉混排）。 */}
+          再加呼吸位——caption 与 navEnd 图标只隔让位线会读成一团（视觉混排）。
+          左侧同样 +1rem 呼吸位：原实现是 header px-4 与内层 pl-[112px] 两层叠加（合计 128px），
+          收进变量时必须保留两层语义，与右侧 +0.75rem 写法对称。 */}
       <header
         className={`
           ${APP_HEADER_CLASS}
           relative flex items-center justify-between
           h-14 shrink-0
-          pl-[max(1rem,var(--titlebar-inset-left))]
+          pl-[max(1rem,calc(var(--titlebar-inset-left)+1rem))]
           pr-[max(1rem,calc(var(--titlebar-inset-right)+0.75rem))]
           [-webkit-app-region:drag]
         `}

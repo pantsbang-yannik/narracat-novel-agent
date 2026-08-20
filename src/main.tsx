@@ -8,14 +8,16 @@ initTheme()
 
 // 平台感知布局：把主进程平台写到 <html data-platform>，顶栏据此适配
 // mac 红绿灯（左侧预留）/ Windows caption 按钮（右侧预留）。
-// window.electron.platform 为准（preload 暴露），非 Electron 环境回退 navigator。
+// window.electron.platform 为准（preload 暴露）；非 Electron 环境只识别 Mac——
+// 其余一律回退 'linux'（globals.css 语义：无自绘按钮，让位为 0）。此前回退 'win32'
+// 会让浏览器直开 dev server 时凭空多出 150px 右让位与 56px 顶 gutter（PR #26 review ③）。
 if (typeof document !== 'undefined') {
   const platform =
     typeof window !== 'undefined' && window.electron?.platform
       ? window.electron.platform
       : typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
         ? 'darwin'
-        : 'win32'
+        : 'linux'
   document.documentElement.dataset.platform = platform
 }
 
