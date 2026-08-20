@@ -22,7 +22,11 @@
 
 **两条防静默失配的守卫**：判据文案收成 `shared/lib/ipc-error.ts` 常量三处共用（原先主进程里重复写了两份），各写各的字符串会在改动一侧时静默失配、损坏态退回老样子且无测试会红；渲染端用 `window.electron?.revealProjectFolder?.()` 调 IPC，**preload 漏登记会完全静默**（可选链吞掉，typecheck 也拦不住，因为 ipc.d.ts 声明是齐的），故补 preload 三处登记守卫。验证：typecheck / 全量 **3055 pass 0 fail**（对 main 基线 +12 tests +3 files）/ check:design / check:architecture / build 全绿。
 
-**待办**：真机 dogfood（与 #37 一起）。原报告里「刚录入一个角色之后」那条链仍未复现——等 ③ 的日志上线后，下次再撞就能一眼看出是哪一步把非项目根的路径当 projectPath 传了下去。
+**dogfood 校正了 issue 的一个前提（2026-08-20 验收通过）**：issue 说「书架放行 invalid 项目」，实际更精确——`scanRootChildren` 只放行 `isNarraCatProject` 为真的目录，所以 `novelRootDir` 下**缺文件**的坏目录压根不会进书架。invalid 卡片有两个来源，行为不同：①**缺 config/state**（`isNarraCatProject` 假）→ 被 root 扫描过滤 → 只可能来自 `recentNovelPaths` → 移除有效；②**文件在但读不出**（yaml 损坏，`loadSummarySafely` catch 分支同样吐 `status:'invalid'`）→ `isNarraCatProject` 真 → **会被 root 扫描列出** → 在 root 下时移除确实无效。四种组合逐个核过，`canRemoveFromLibrary` 的判据都对——**第②类正是 `canRemove=false` 分支存在的理由**，不能因为「invalid 项目总能移除」的直觉把它删掉。
+
+**造 dogfood 数据的教训**：第一次把测试用的坏项目建在 `novelRootDir` 下，结果它被上面那条过滤规则挡住、根本不显示，白让产品主人找了一轮。**造完测试数据必须先离线跑一遍消费方**（这里是 `scanNovelProjects`）证明它真会出现，再叫人去看——否则就是把未经验证的东西当成已完成交付。
+
+**dogfood 结果**：五步验收全过（卡片人话文案 / 点击不跳工作台而弹浮层 / 「打开所在文件夹」/ 「从书架移除」后卡片消失且文件夹仍在 / 原始文件名不外露）。原报告里「刚录入一个角色之后」那条链仍未复现——等 ③ 的日志上线后，下次再撞就能一眼看出是哪一步把非项目根的路径当 projectPath 传了下去。
 
 **2026-08-18（社区第三批：custom 渠道支持 OpenAI 协议，PR #13 = #5 刀 1，`4699fb2`）**：@zfengChen 的提案 #5 拆三刀后的第一刀落地。custom 渠道新增 `wire` 字段（`anthropic` 默认 / `openai`），主链走 pi-ai 原生 `openai-completions`（零新依赖），模型清单双头拉取（`Bearer {base}/models` vs `x-api-key {base}/v1/models`），wire 贯通配置归一化 / 验证快照 / 会话指纹。**默认行为零变化**——`normalizeWire` 把 openai 锁死在 custom 渠道，内置四家含手改配置文件一律回落 anthropic，错配拦在入口而非事后补救。
 
