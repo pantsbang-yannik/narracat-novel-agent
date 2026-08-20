@@ -1,5 +1,11 @@
 import { TOOL_PATH_INPUT_KEYS } from '@shared/lib/agent-path-scrub'
 
+/**
+ * 工具名有两代：当前 pi runtime 用小写内置名（read/write/edit/bash/grep/find/ls，
+ * 权威映射见 electron/main/agent/runtime/adapters/pi/pi-tool-guard.ts 的
+ * SDK_TO_PI_TOOL_NAME——注意 Glob 已改名为 find），claude-sdk 时代的大写名仍保留，
+ * 因为用户机器上的历史会话事件里存的是旧名，重看旧对话时要能正确渲染。
+ */
 export interface ToolPhrase {
   label: string
   loadingLabel: string
@@ -179,7 +185,8 @@ export function getToolPhrase(toolName: string, rawInput?: ToolInput): ToolPhras
   const input = asRecord(rawInput)
 
   switch (toolName) {
-    case 'Read': {
+    case 'Read':
+    case 'read': {
       const path = firstString(input, [...TOOL_PATH_INPUT_KEYS])
       if (!path) return phrase('读取文件')
 
@@ -192,7 +199,8 @@ export function getToolPhrase(toolName: string, rawInput?: ToolInput): ToolPhras
       return phrase(`读取 ${filename(path)}`)
     }
 
-    case 'Edit': {
+    case 'Edit':
+    case 'edit': {
       const path = firstString(input, [...TOOL_PATH_INPUT_KEYS])
       const name = path ? filename(path) : '文件'
       const diff = diffStats(input)
@@ -204,7 +212,8 @@ export function getToolPhrase(toolName: string, rawInput?: ToolInput): ToolPhras
       return phrase(`编辑 ${parts.join(' ')}`)
     }
 
-    case 'Write': {
+    case 'Write':
+    case 'write': {
       const path = firstString(input, [...TOOL_PATH_INPUT_KEYS])
       const name = path ? filename(path) : '文件'
       const content = input.content
@@ -214,23 +223,35 @@ export function getToolPhrase(toolName: string, rawInput?: ToolInput): ToolPhras
       return phrase(`写入 ${name}`)
     }
 
-    case 'Bash': {
+    case 'Bash':
+    case 'bash': {
       const command = firstString(input, ['command'])
       return phrase(command ? `执行 ${compactInlineText(command, 80)}` : '执行命令')
     }
 
-    case 'Grep': {
+    case 'Grep':
+    case 'grep': {
       const pattern = firstString(input, ['pattern'])
       if (!pattern) return phrase('搜索内容')
       const scope = firstString(input, ['glob', 'path'])
       return phrase(scope ? `搜索内容 /${pattern}/ in ${scope}` : `搜索内容 /${pattern}/`)
     }
 
-    case 'Glob': {
+    case 'Glob':
+    case 'find': {
       const pattern = firstString(input, ['pattern'])
       if (!pattern) return phrase('搜索文件')
       const path = firstString(input, ['path'])
       return phrase(path ? `搜索文件 ${pattern} in ${path}` : `搜索文件 ${pattern}`)
+    }
+
+    case 'ls': {
+      const path = firstString(input, ['path'])
+      return phrase(path ? `查看目录 ${filename(path)}` : '查看目录')
+    }
+
+    case 'AskUserQuestion': {
+      return phrase('向你提问')
     }
 
     case 'WebFetch': {
