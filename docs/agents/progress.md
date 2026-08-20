@@ -12,6 +12,16 @@
 
 产品路线以下方 **Next（产品路线图 · 2026-07-12 统筹版）** 为准：四条泳道 = A 花的所有权（用户编辑）/ B 花的表达权（可配置底座）/ C 尺（评价与验证）/ D 账房（记忆与资产底座）。战略层以 `docs/COMPASS.md` 为准，执行入口 `/next-issue`。
 
+**2026-08-20（#37 刀①：durable 事件路径取证，分支 `fix/37-durable-path-forensics` = `554705d`，未合并）**：Agent 过程流频繁「已跳过 调用 read」，取证发现 read 失败率 **25.6%（50/195）**，但错误里的路径被我们自己的脱敏（`agent-durable-events.ts` 的 `ABSOLUTE_PATH`）整段抹成 `[本机路径]`——**根因不可查这件事本身是第一层问题**。改法：脱敏**之前**先把已知根相对化成 `<项目>/…` / `<引擎>/…`，根以上不落盘、根以外照旧整段抹。
+
+**issue 原方案只做脱敏，实测会留 1/3 盲区**：50 次失败里 33 次 ENOENT 的错误串自带路径，另外 **17 次 EISDIR 的错误串根本不含路径**（`EISDIR: illegal operation on a directory, read`，到此为止），唯一带路径的是 `tool.started` 的 `input`，而 sink 的 `tools` Map 只存 `{messageId,toolName,title}`、input 被丢弃。故落盘事件新增可选 `target`：在 started 时取出路径、相对化后存进 live 投影，收尾事件再写出。**只改脱敏对 EISDIR 那一类无效**，会再来一轮。
+
+**已知根经装配层注入**（`ipc/agent.ts` → coordinator → sink），与 run-manager / pi adapter 共用同一份 `resolveNarraCatAgentCorePath({appRoot, resourcesPath})`（均不传 `envPath`），避免两处算出不同引擎根。**根为空时功能不报错、不失败，只是落盘里照旧 `[本机路径]` 而单测全绿**——这类静默失效只能在装配处拦，故加了装配层源码断言。
+
+**测试覆盖的边界**：兄弟目录前缀误伤（`/novel-x` 不得吃掉 `/novel-x-backup`，最初实现真踩了，落盘会变成 `<项目>-backup`）、Windows 两侧分隔符不一致（配置里 `/`、Node 错误串里 `\`，按字面匹配整条漏掉 = Windows 上取证等于没做）、项目外路径仍被抹、存量事件缺 `target` 字段仍可读。验证：typecheck / 全量 **3053 pass 0 fail**（对 main 基线 3043/301 为 **+10 tests +2 files**，核对过文件数不是静默跳过）/ check:design / check:architecture / build 全绿；启动烟测正常，dev 下引擎根解析为真实存在目录并验证相对化生效。
+
+**待办**：真机 dogfood 跑一章拿真实路径分布，才能进 #37 的 ②（过程流区分「跳过」与「失败」）与 ③（25% 打空的系统性根因）。③ 明确**不能凭猜改 prompt**。
+
 **2026-08-18（社区第三批：custom 渠道支持 OpenAI 协议，PR #13 = #5 刀 1，`4699fb2`）**：@zfengChen 的提案 #5 拆三刀后的第一刀落地。custom 渠道新增 `wire` 字段（`anthropic` 默认 / `openai`），主链走 pi-ai 原生 `openai-completions`（零新依赖），模型清单双头拉取（`Bearer {base}/models` vs `x-api-key {base}/v1/models`），wire 贯通配置归一化 / 验证快照 / 会话指纹。**默认行为零变化**——`normalizeWire` 把 openai 锁死在 custom 渠道，内置四家含手改配置文件一律回落 anthropic，错配拦在入口而非事后补救。
 
 **两轮 review。第一轮抓到的阻断项是这条记录的重点**：切协议按钮**实质点不动，还会把磁盘上已落盘的 wire 静默改回去**。根因在 `src/lib/settings-config.ts` 的草稿保护——`toDisplay` 把 providers 整个换回本地草稿（原为防「用户正在打字的 baseUrl 被落盘结果吃掉」），而 `onModelWireChange` 从不更新草稿里的 wire，这层保护就变成了回滚；紧接着 `mergeProviderDraft` 在「测试连接」时把整个 provider 对象从草稿写回 persisted，把磁盘上正确的 openai 也覆盖掉。**本质是把离散的即时落盘字段（wire，语义同「设为主力」）塞进了为打字输入设计的保护圈**。采纳修法 2（字段级保护：只回护 `baseUrl`），一次修掉两处。**贡献者的根因交代比修复本身值钱**：这刀是从他 fork 的完整实现里提取的，原版有 `displayProviders:'saved'` 防这类回滚，提取时被当成动态渠道的附属品剔掉了——**从大实现里切片时被剥离的保护件，是回归的高发区**，以后审同类提取式 PR 要专门过一遍。
