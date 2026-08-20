@@ -132,7 +132,7 @@ describe('agent event sink', () => {
       toolCallId: 'tool-1',
       toolName: 'Read',
       title: '读取 /Users/writer/secret-novel/chapter.md',
-      input: { file_path: '/Users/writer/secret-novel/chapter.md', apiKey: 'sk-secret' },
+      input: { path: '/Users/writer/secret-novel/chapter.md', apiKey: 'sk-secret' },
       createdAt: occurredAt,
     })
     await sink.publish({
@@ -625,7 +625,8 @@ describe('durable tool forensics (#37)', () => {
       toolCallId: 'tool-forensics',
       toolName: 'Read',
       title: '调用 Read',
-      input: { file_path: `${projectPath}/bible/characters` },
+      // pi runtime 的真实参数名是 `path`（真机会话取证），测试必须用真实形态
+      input: { path: `${projectPath}/bible/characters` },
       createdAt: occurredAt,
     })
     await sink.publish({
@@ -713,7 +714,7 @@ describe('durable tool forensics (#37)', () => {
       toolCallId: 'tool-engine',
       toolName: 'Read',
       title: '调用 Read',
-      input: { file_path: `${agentCorePath}/skills/write.md` },
+      input: { path: `${agentCorePath}/skills/write.md` },
       createdAt: occurredAt,
     })
     await sink.publish({

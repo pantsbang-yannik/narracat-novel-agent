@@ -17,8 +17,15 @@ export interface ScrubRoot {
 /**
  * 工具 input 里表示「操作目标文件」的字段名，按优先级排列。
  * 与 `src/components/workbench/agent/tool-phrase.ts` 的路径读取共用同一份，避免两处漂移。
+ *
+ * `path` 是当前 pi runtime 的真实契约——真机会话取证：read / write / find / grep
+ * 一律用 `path`，无一使用 `file_path`。后两个是 claude-sdk 时代（工具名还是大写 `Read`）
+ * 的遗留字段，留作兼容存量数据，新链路不会命中。
+ *
+ * 教训：最初只照搬了 tool-phrase.ts 的 ['file_path','filePath']，结果 target 在真实
+ * run 里恒为空，而全部单测照样绿——字段名这类跨系统契约必须拿真实数据核对，不能靠读同仓代码推断。
  */
-export const TOOL_PATH_INPUT_KEYS = ['file_path', 'filePath'] as const
+export const TOOL_PATH_INPUT_KEYS = ['path', 'file_path', 'filePath'] as const
 
 /**
  * 从工具调用入参里取出操作目标路径。取不到就返回 undefined——宁可没有 target 字段，

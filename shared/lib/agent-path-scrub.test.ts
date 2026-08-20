@@ -42,6 +42,16 @@ describe('extractToolTargetPath', () => {
     )
   })
 
+
+  test('reads the pi runtime path argument (#37 dogfood: real tools use `path`)', () => {
+    // 真机取证：pi 的 read/write/find/grep 一律用 `path`。
+    // 最初照搬了 tool-phrase.ts 的 ['file_path','filePath']——那是 claude-sdk 时代的
+    // 契约（工具名还是大写 Read），换 pi 后早已不成立，导致 target 在真实 run 里恒为空。
+    expect(extractToolTargetPath({ path: '/a/b/.narracat/staging/ch-021.md' })).toBe(
+      '/a/b/.narracat/staging/ch-021.md',
+    )
+  })
+
   test('returns undefined for a tool call that carries no path', () => {
     // 无路径的工具（MCP 查询等）不该凭空造出一个 target 字段。
     expect(extractToolTargetPath({ query: '林小满是谁' })).toBeUndefined()
