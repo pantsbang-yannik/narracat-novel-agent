@@ -47,7 +47,7 @@ allowed-tools: [Agent, TaskCreate, TaskUpdate, Read, Write, Glob, AskUserQuestio
 
 ## 步骤 2：确认（仅协作模式）
 
-automation_level == "collaborative" 时：向用户摘要本章细纲要点与上下文准备时的提醒，AskUserQuestion「开始写作」/「取消」；取消 → 终止。automation_level == "auto" 时跳过。完成后 novel_checkpoint(step=2)。
+automation_level == "auto" 时跳过本步骤；**其余情况一律走确认门**（含 `.narracat/config.yaml` 里没有这个字段——缺省即协作，与 plan.md 同向）：向用户摘要本章细纲要点与上下文准备时的提醒，AskUserQuestion「开始写作」/「取消」；取消 → 终止。完成后 novel_checkpoint(step=2)。
 
 ## 步骤 3：正文生成
 
