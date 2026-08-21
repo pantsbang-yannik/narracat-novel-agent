@@ -13,10 +13,19 @@ import { resolveLightModel, resolvePrimaryModel } from '@shared/lib/model-slots'
 /** 窗口值与 SDK 侧 CLAUDE_CODE_MAX_CONTEXT_TOKENS 对齐。 */
 const ONE_M_CONTEXT_WINDOW = 1_000_000
 const DEFAULT_CONTEXT_WINDOW = 200_000
-/** 对齐 SDK 路径的实际输出上限（sdk-runner 未设输出 env，走 Claude CLI 默认 32000）——A/B 单变量
- * 纪律：8192 会截断章节写作长输出，是 SDK 路径没有的新变量；超限仍触发 stopReason='length'，
- * 由事件映射 fail-loud（生产接线门前项①）。 */
-export const TARGET_MAX_OUTPUT_TOKENS = 32_000
+/** 实际输出上限。原为 32000（对齐 SDK 路径的 Claude CLI 默认值），真机撞顶后按实测抬到 64000。
+ *
+ * 为什么 32000 不够：DeepSeek V4 默认开着 thinking，而 thinking 计入 output_tokens。真机第 22 章
+ * （3912 字）走一次冷改实测 output 21561 tokens，其中 **87% 是 thinking**——32000 只剩三分之一
+ * 余量，生产上冷改还要带任务书、正文路径与四遍指令，撞顶是必然。撞顶的后果不只是慢：主会话
+ * 会一路降级重试（先禁止贴正文、再砍遍数、最后拆成定点补丁），把「冷改必须整章重缝」这条已被
+ * 盲读验证过的质量纪律给跨了。
+ *
+ * provider 不是瓶颈：deepseek-v4-flash 输出上限 384K，一直是我们自己配的这个数在卡。
+ *
+ * 注意这里只加余量，没有关 thinking——关掉能省那 87%，但它是创作质量变量，要走真稿盲评，
+ * 不在本刀范围。超限仍触发 stopReason='length'，由事件映射 fail-loud。 */
+export const TARGET_MAX_OUTPUT_TOKENS = 64_000
 
 /**
  * 上游补偿系数（issue #35）：`@mariozechner/pi-ai@0.73.1` 的 `buildParams`

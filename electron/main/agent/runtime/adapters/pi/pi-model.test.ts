@@ -44,7 +44,11 @@ describe('createPiModel', () => {
     // 断言**实发值**而不是 Model 上的存值：上游 pi-ai 会先除以 3（issue #35），
     // 原来这里只盯存值 32000，于是「意图 32000、实发 10666」悄悄跑了很久都没人发现。
     expect(effectivePiMaxTokens(model.maxTokens)).toBe(TARGET_MAX_OUTPUT_TOKENS)
-    expect(TARGET_MAX_OUTPUT_TOKENS).toBe(32_000)
+    // 64000 不是拍脑袋：真机第 22 章（3912 字）走一次冷改，thinking 开着时单次 output 实测
+    // 21561 tokens（其中 87% 是 thinking），32000 只剩三分之一余量——生产上冷改还要带任务书、
+    // 正文路径与四遍指令，比裸测重得多，撞顶是必然。provider 侧 deepseek-v4-flash 上限 384K，
+    // 不是瓶颈；瓶颈一直是我们自己配的这个数。
+    expect(TARGET_MAX_OUTPUT_TOKENS).toBe(64_000)
   })
 
   test('实发 max_tokens 补偿上游除以 3（issue #35 的唯一护栏）', () => {
