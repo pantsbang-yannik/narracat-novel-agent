@@ -106,6 +106,19 @@ export function registerAppIpcHandlers(): void {
     return `pong-${Date.now()}`
   })
 
+  // Windows 标题栏 overlay 符号颜色跟随主题（浅色 UI 用深符号，深色 UI 用白符号）。
+  // 仅 win32 有效：mac 红绿灯由系统绘制、Linux 无 overlay，调用会抛错故先判平台。
+  ipcMain.handle('window:set-titlebar-overlay-symbol-color', (_event, symbolColor: unknown) => {
+    if (process.platform !== 'win32' || typeof symbolColor !== 'string') return
+    for (const win of BrowserWindow.getAllWindows()) {
+      try {
+        win.setTitleBarOverlay({ symbolColor })
+      } catch {
+        // 窗口销毁竞态等边缘情况静默忽略，不影响主流程。
+      }
+    }
+  })
+
   // 内测软过期 + 远程急刹车（#354）：渲染端启动时查一次，命中则显示拦截页。
   ipcMain.handle('release-guard:check', async (): Promise<ReleaseGateVerdict> => {
     return evaluateReleaseGuard()
