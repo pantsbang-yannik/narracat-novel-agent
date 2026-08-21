@@ -237,7 +237,7 @@ export function createTaskTool({
         }
         // details 是给 UI 的侧信道（见 PiSubagentAbnormalStopDetails，那里记着 UI 上的确切口径）：
         // 模型收到的是带 ⚠️ 前缀的成功结果（保住已产出部分与质量门反馈），任务卡则据此收口成
-        // tool.failed——逐项呈现从「完成」变「已跳过」+ 失败原因，不再一声不吭地放行。
+        // tool.failed——逐项呈现从「完成」变「失败」+ 失败原因，不再一声不吭地放行。
         const details: PiSubagentAbnormalStopDetails | undefined = abnormalStop
           ? { narracatSubagentAbnormalStop: abnormalStop }
           : undefined

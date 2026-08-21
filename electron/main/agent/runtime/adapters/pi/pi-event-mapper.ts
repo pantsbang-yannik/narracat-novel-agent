@@ -33,10 +33,10 @@ export const PI_SESSION_MESSAGE_TYPE = 'narracat_pi_session'
  * 键名带 narracat 前缀避免与任何第三方工具的 details 撞名（本映射对全部工具生效）。
  *
  * UI 上的实际口径（别过度承诺）：tool.failed 复用工具级失败的既有通用呈现——执行过程流里逐项徽章
- * 是「已跳过」+ 失败原因（展开可见），而不是「完成」；折叠态汇总行仍读作「执行过程已完成 · N 项
- * （自动调整 M 次）」。汇总行那句是「工具级错误属自愈型瞬时事件」的既有产品决策
- * （见 AgentProcessStream.tsx），子会话异常终止（烧掉数分钟与整章 token 的实质失败）是否该在
- * 汇总行破例，留给产品单独决定，本刀不动（#29）。渲染端断言见
+ * 是「失败」+ 失败原因（展开可见），而不是「完成」；折叠态汇总行读作「执行过程已完成 · N 项
+ * （M 次失败）」，如实计次但不升级成 run 级红色告警（#37 刀②改的就是这句措辞，原文「自动调整
+ * M 次」把报错说成了 agent 的主动优化，见 AgentProcessStream.tsx）。仍未做的是把失败原因提到
+ * 折叠态——那要动汇总行信息密度，不在本刀范围。渲染端断言见
  * src/components/workbench/agent/AgentSubagentAbnormalStop.test.tsx。
  */
 export type PiSubagentAbnormalStop = 'length' | 'error'

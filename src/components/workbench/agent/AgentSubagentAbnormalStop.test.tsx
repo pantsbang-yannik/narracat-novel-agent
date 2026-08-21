@@ -65,8 +65,9 @@ describe('子会话异常终止的任务卡渲染（#29 刀 2）', () => {
       reduceTaskDispatch({ content: [{ type: 'text', text: RESULT_TEXT }], details: ABNORMAL_STOP_DETAILS }),
     )
 
-    // 逐项徽章：已跳过（工具级失败的既有中性呈现），绝不能是「完成」
-    expect(html).toContain('>已跳过<')
+    // 逐项徽章：失败（中性呈现，不用警报色），绝不能是「完成」，也不能说成「已跳过」
+    expect(html).toContain('>失败<')
+    expect(html).not.toContain('>已跳过<')
     expect(html).not.toContain('>完成<')
     expect(html).toContain('章节写手Agent 写第 3 章')
     // 失败原因对用户可见，且能看出是 length（截断）而非 error
@@ -79,21 +80,21 @@ describe('子会话异常终止的任务卡渲染（#29 刀 2）', () => {
     )
 
     expect(html).toContain('>完成<')
-    expect(html).not.toContain('>已跳过<')
+    expect(html).not.toContain('>失败<')
     expect(html).not.toContain(ABNORMAL_STOP_REASON)
   })
 
-  test('现状留档：折叠态汇总行仍读作「已完成」，失败原因要展开才看得到', () => {
-    // 这条不是目标态，是如实记录刀 2 到此为止的边界：执行过程流的汇总行沿用「工具级错误是自愈型
-    // 瞬时事件」的既有产品口径（AgentProcessStream:56），把异常终止一并算进「自动调整 N 次」。
-    // 子会话异常终止（烧掉几分钟与整章 token 的实质失败）是否该在汇总行破例，留给产品决定（#29）。
+  test('折叠态汇总行如实计次「1 次失败」，具体原因仍要展开才看得到', () => {
+    // 汇总行沿用「工具级失败不升级成 run 级红色告警」的既有口径，但计次措辞已由「自动调整 N 次」
+    // 改为「N 次失败」（#37 刀②）——异常终止算进这一格是对的，它本就是失败，不是自动调整。
+    // 仍未做的是把失败原因提到折叠态：那要动汇总行信息密度，超出本刀范围。
     const message = reduceTaskDispatch({
       content: [{ type: 'text', text: RESULT_TEXT }],
       details: ABNORMAL_STOP_DETAILS,
     })
     const html = renderToStaticMarkup(<AgentMessageItem message={message} />)
 
-    expect(html).toContain('执行过程已完成 · 0 项（自动调整 1 次）')
+    expect(html).toContain('执行过程已完成 · 0 项（1 次失败）')
     expect(html).not.toContain(ABNORMAL_STOP_REASON)
   })
 })
