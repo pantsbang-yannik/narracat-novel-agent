@@ -18,6 +18,7 @@
  */
 import { join } from 'node:path'
 import type { ToolDefinition } from '@mariozechner/pi-coding-agent'
+import { createPortableFindTool } from './pi-fs-tools.ts'
 import { resolveNarraCatEngine } from '../../../../engine/engine.ts'
 import { resolveEngineAgentDefinitions } from '../../../../engine/engine-agent-registry.ts'
 import type { EngineAgentDefinition } from '../../../../engine/engine-agent-registry.ts'
@@ -98,6 +99,10 @@ async function buildPiRunOptions(
   const customTools: ToolDefinition[] = includeAskUserQuestion
     ? [createAskUserQuestionTool({ canUseTool: canUseTool!, signal: args.abortController.signal })]
     : []
+  // pi 内置 find 走 fd 二进制（查 PATH → 查不到就去 GitHub 下载），两条路在打包版上都不通：
+  // Finder 启动的 App 继承 launchd 窄 PATH，作者机器也不会装 fd。同名 customTool 覆盖内置那个。
+  // 只在工具面本来就有 find 时注入——不给没这个面的会话凭空多一个工具。
+  if (face.tools.includes('find')) customTools.push(createPortableFindTool(cwd))
   // 引擎钩子（字数提示/任务书系统词硬门）只在 loadNarraCatRuntime 时挂：学习/向导等沙盒会话
   // 本就不跑引擎契约，与 SDK 侧同条件不装载 plugin 对齐（brief 见 Task 5 任务书）。
   const agentDir = join(args.userDataPath ?? args.appRoot, 'pi-agent')
@@ -143,6 +148,10 @@ async function buildPiRunOptions(
     const childMemoryTools = memoryContext
       ? createMemoryTools({ definitions: memoryContext.definitions, allowedNames: childFace.memoryTools, channel: memoryContext.channel })
       : []
+    // 与父会话同一条纪律：写手/审校都跑在子会话里，漏了这条它们的 find 照样是坏的。
+    const childCustomTools = childFace.tools.includes('find')
+      ? [...childMemoryTools, createPortableFindTool(cwd)]
+      : childMemoryTools
     // model 别名映射（生产接线门前项②）：frontmatter 三别名走模型池槽位，其余继承 run 模型。
     const childModel = createPiModel(args.config, resolvePiModelAlias(args.config, definition.model))
     return {
@@ -151,14 +160,14 @@ async function buildPiRunOptions(
       apiKey: args.apiKey,
       cwd,
       agentDir,
-      tools: [...childFace.tools, ...childMemoryTools.map((tool) => tool.name)],
+      tools: [...new Set([...childFace.tools, ...childCustomTools.map((tool) => tool.name)])],
       maxTurns: SUBAGENT_MAX_TURNS,
       systemPrompt: definition.prompt,
       abortController: childAbort,
       // 各子会话新起一个实例：救回逻辑的 eager 快照是扩展闭包内的 run 级状态，共用实例会让
       // 并发子会话互相串参数。
       extensions: [createPiEagerToolArgsRestorer(), childGuard, createPiEngineHooksExtension({ cwd })],
-      customTools: childMemoryTools,
+      customTools: childCustomTools,
     }
   }
 
@@ -197,7 +206,9 @@ async function buildPiRunOptions(
     agentDir,
     // pi 的 isAllowedTool 会把不在 tools 白名单里的 custom tool 过滤掉（切片③已踩），故自定义工具
     // 名必须同步登记进白名单。
-    tools: [...face.tools, ...customTools.map((tool) => tool.name)],
+    // 去重：portable find 与内置同名，两边都列会让工具面出现重复项（pi 侧无害，但工具面是
+    // 对外可观测的契约，保持它等于「这个会话真正能用的工具集合」）。
+    tools: [...new Set([...face.tools, ...customTools.map((tool) => tool.name)])],
     maxTurns: args.maxTurns ?? DEFAULT_PI_MAX_TURNS,
     systemPrompt: typeof args.systemPrompt === 'string' ? args.systemPrompt : undefined,
     systemPromptAppendix: agentsGuide ?? undefined,

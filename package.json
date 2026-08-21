@@ -116,6 +116,7 @@
     "tailwind-merge": "^3.5.0",
     "three": "^0.185.1",
     "three-spritetext": "^1.10.0",
+    "tinyglobby": "^0.2.17",
     "typebox": "1.3.8",
     "yaml": "^2.8.4",
     "zustand": "^5.0.12"
