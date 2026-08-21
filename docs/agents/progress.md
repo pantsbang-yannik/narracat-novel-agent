@@ -4,13 +4,27 @@
 
 ## Current Branch
 
-`main`（= `05bc56c`，**已 push**）。工具可靠性四刀已全部合入（#43 UI 措辞 / #44 引擎串档 / #45 find 去 fd / #46 输出上限 64000，引擎 **4.0.174**）。本地在此之上有未提交改动：grep 去 ripgrep 依赖 + `/write` 确认门缺省语义 + thinking 分档 + 输出上限按模型兑现（引擎 **4.0.176**），见下方最新三条。**四刀 + 这四项的真机验收统一待做。**
+`main`（= `05bc56c`，**已 push**）。工具可靠性四刀已全部合入（#43 UI 措辞 / #44 引擎串档 / #45 find 去 fd / #46 输出上限 64000，引擎 **4.0.174**）。分支 `fix/agent-tool-and-writing-chain` 在此之上攒了五刀（引擎 **4.0.177**），**未 push**。前四刀已真机验收通过（0.1.64 包），第五刀（未建档角色不再整单驳回）待下次跑章验证。
 
 ## Current Phase
 
 主线 `main`。产品北极星 = ADR-0030「账房归我们 / 花归用户 / 尺归读者」；产品方向 2026-07-11 定案两大模块「用户编辑 + 可配置底座」。**正文编辑器主战役已收官**（PR #443 合并 main，ADR-0031，引擎 4.0.91，产品主人真机验收通过）；写作质量「脱胎换骨」主线阶段性收刀（arc 速度靶 PR #441 / 获得引擎四刀 PR #442 均已合并）。ADR 已扩至 **0035**。
 
 产品路线以下方 **Next（产品路线图 · 2026-07-12 统筹版）** 为准：四条泳道 = A 花的所有权（用户编辑）/ B 花的表达权（可配置底座）/ C 尺（评价与验证）/ D 账房（记忆与资产底座）。战略层以 `docs/COMPASS.md` 为准，执行入口 `/next-issue`。
+
+**2026-08-21（真机验收 + 第五刀：未建档角色从「整单驳回」改成「跳过并点名」，引擎 4.0.177）**：用 0.1.64 包跑完第 23 章。**前三刀确认真机生效**：grep 0 失败（基线 1 次 `rg is not available`）、find 0 失败（基线 1 次 `fd is not available`）、输出上限截断 0 次（基线 3 次），派发原文里冷改那一遍带着 `thinking='off'`，产品主人反馈「确实变快了」。
+
+**但我给的验收判据是错的，差点误判成串档。** 判据数的是 `novel_stage_extraction` 的**原始工具调用次数**（目标 3），实测 7 次（6 成功 + 1 失败）、`novel_commit_chapter` 2 次，看着像串档。查下来完全不是：`novel_commit_extraction_union` 返回 **`staged_runs: 3` / `facts_committed: 44` / `warnings: []`**，三轮暂存各自成功、并集正常落库；主会话派发原文也完全照 write.md（三个任务各带 run_id 1/2/3、收尾任务带「不做事实抽取」禁令），收尾 agent 自己也回报「未调用抽取脚手架与事实暂存工具」。**多出来的 4 次全是被整单驳回后的重发。** 这与上次「脚手架次数不可作判据」是同一类错误——**原始调用次数区分不了「串档」与「合法重试」，权威判据是 `staged_runs`**。
+
+**根因**：`writers.ts` 里 `relationship_updates` 只要有一端角色未建档，整个调用返回 errors、**19 条事实一条都不落**；`novel_commit_chapter` 的 `characters_appeared` 同款。第 23 章新登场巡检、张福、清河剑派、镇岳堂、茶棚客商五个未建档角色，于是三个暂存 agent + 一个收尾 agent 各吃一次驳回、各把整份清单重新生成并重发一遍。**那次 `run_id` 缺失的校验失败就是重发时模型漏了字段**（它下一次立刻补上，零数据损失）。而驳回的 hint 写的是「确认角色名与档案一致」，假设的是名字写错——对真·新登场角色完全没用；memory-keeper 也没有建档权限，**驳回换来的唯一结果就是多跑一轮**。
+
+**改法**：两处都改成「跳过该条 + 在返回里点名」，facts / 章摘要照常落库。理由是同一个函数里本来就有两套标准——`resolveExtractionFacts` 下方「非关系事实主体未建档」一直是只 warning、照常入库；`novelCommitChapter` 里 `checkChapterWordCount` 也是「finding-only，只标不阻断」。顺带把 `relationships_updated` 从「入参条数」改成「实际折算条数」（跳过了却报「已更新」是骗调用方），`characters_appeared` 计数同理只计真正入库的。
+
+**光改工具还不够**：工具不驳回了，agent 看到 warning 仍可能自己重发。故 `memory-keeper.md` 两处补明「被跳过是正常处置，**不要为此重发整份清单**」。
+
+**验证**：先按 TDD 把两条钉住驳回的旧用例改成钉住新行为（先红 2 条），实现后 mcp-server **926 pass / 0 fail across 38 files**（走 vitest 不是 bun）；App 侧 typecheck / **3131 pass 0 fail across 311 files** / check:architecture 全绿；`verify:narracat-agent-core` 版本一致 4.0.177；dist 已随 src 重建并提交。**本刀真机未验**——下次跑章看那 4 次重发是否消失。
+
+**顺带记两个盲区**（这次靠 pi 主会话 JSONL + 数据库 + 并集返回值三处拼才查出来）：durable 事件里子 agent 的工具调用 `parentToolCallId` / `agentId` 全是 None、`summary` 全空，**无法从事件流回答「这个调用是哪个子 agent 发的」**。另外 read 仍有 5 次失败（16.1%）：2 次 EISDIR（把目录当文件读）+ 3 次 ENOENT（猜文件名 `novel.md` / `ch-023.md` / 上一章的 `ch-022.md`），即 #37 ③ 那条线索。
 
 **2026-08-21（输出上限按模型兑现：`before_provider_request` 改写请求体，未提交）**：接上一条撞出的「实发 max_tokens 恒为 32000」。生产恒走 `streamSimple`，`sdk.js` 不接受外部 streamFn，唯一改得到真实请求体的官方口子是扩展事件 `before_provider_request`（`sdk.js:215` 的 `onPayload` → `anthropic.js:318` / `openai-completions.js:78` 用返回值整份替换 params）。新增 `pi-max-output-tokens.ts` 挂在这里。
 
