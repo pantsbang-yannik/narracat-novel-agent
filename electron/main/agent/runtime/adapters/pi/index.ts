@@ -18,7 +18,7 @@
  */
 import { join } from 'node:path'
 import type { ToolDefinition } from '@mariozechner/pi-coding-agent'
-import { createPortableFindTool } from './pi-fs-tools.ts'
+import { createPortableFindTool, createPortableGrepTool } from './pi-fs-tools.ts'
 import { resolveNarraCatEngine } from '../../../../engine/engine.ts'
 import { resolveEngineAgentDefinitions } from '../../../../engine/engine-agent-registry.ts'
 import type { EngineAgentDefinition } from '../../../../engine/engine-agent-registry.ts'
@@ -99,12 +99,13 @@ async function buildPiRunOptions(
   const customTools: ToolDefinition[] = includeAskUserQuestion
     ? [createAskUserQuestionTool({ canUseTool: canUseTool!, signal: args.abortController.signal })]
     : []
-  // pi 内置 find 走 fd 二进制（查 PATH → 查不到就去 GitHub 下载），两条路在打包版上都不通：
-  // Finder 启动的 App 继承 launchd 窄 PATH，作者机器也不会装 fd。同名 customTool 覆盖内置那个。
-  // 只在工具面本来就有 find 时注入——不给没这个面的会话凭空多一个工具。
+  // pi 内置 find/grep 走 fd/ripgrep 二进制（查 PATH → 查不到就去 GitHub 下载），两条路在打包版上
+  // 都不通：Finder 启动的 App 继承 launchd 窄 PATH，作者机器也不会装这类开发者工具。同名
+  // customTool 覆盖内置那个。只在工具面本来就有它时注入——不给没这个面的会话凭空多一个工具。
   if (face.tools.includes('find')) customTools.push(createPortableFindTool(cwd))
   // 引擎钩子（字数提示/任务书系统词硬门）只在 loadNarraCatRuntime 时挂：学习/向导等沙盒会话
   // 本就不跑引擎契约，与 SDK 侧同条件不装载 plugin 对齐（brief 见 Task 5 任务书）。
+  if (face.tools.includes('grep')) customTools.push(createPortableGrepTool(cwd))
   const agentDir = join(args.userDataPath ?? args.appRoot, 'pi-agent')
   // eager 工具参数救回（issue #16）修的是 pi 传输层的参数丢失，与引擎契约无关：任何会话都可能
   // 中招（学习/向导沙盒、direct-chat 一样打 Anthropic wire），故不受 loadNarraCatRuntime 门控。
@@ -148,10 +149,12 @@ async function buildPiRunOptions(
     const childMemoryTools = memoryContext
       ? createMemoryTools({ definitions: memoryContext.definitions, allowedNames: childFace.memoryTools, channel: memoryContext.channel })
       : []
-    // 与父会话同一条纪律：写手/审校都跑在子会话里，漏了这条它们的 find 照样是坏的。
-    const childCustomTools = childFace.tools.includes('find')
-      ? [...childMemoryTools, createPortableFindTool(cwd)]
-      : childMemoryTools
+    // 与父会话同一条纪律：写手/审校都跑在子会话里，漏了这条它们的 find/grep 照样是坏的。
+    const childCustomTools = [
+      ...childMemoryTools,
+      ...(childFace.tools.includes('find') ? [createPortableFindTool(cwd)] : []),
+      ...(childFace.tools.includes('grep') ? [createPortableGrepTool(cwd)] : []),
+    ]
     // model 别名映射（生产接线门前项②）：frontmatter 三别名走模型池槽位，其余继承 run 模型。
     const childModel = createPiModel(args.config, resolvePiModelAlias(args.config, definition.model))
     return {

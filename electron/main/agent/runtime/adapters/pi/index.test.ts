@@ -140,9 +140,9 @@ describe('切片③ 权限门禁接线', () => {
     const adapter = createPiAdapter()
     const options = (await adapter.createRunOptions(makeRunConfig())) as PiRunOptions
     expect(options.tools).toEqual(['read', 'grep', 'find', 'bash'])
-    // 只有 find（不依赖 fd 的替代实现，工具面含 find 时自动注入）——此处要钉的是
+    // 只有 find/grep（不依赖 fd/ripgrep 的替代实现，工具面含它们时自动注入）——此处要钉的是
     // 「不注册其它自定义工具」，故精确列举而非只判空。
-    expect(options.customTools.map((tool) => tool.name)).toEqual(['find'])
+    expect(options.customTools.map((tool) => tool.name)).toEqual(['find', 'grep'])
   })
 
   test('allowedTools 含 AskUserQuestion 时注册自定义工具且 tools 列表含其名', async () => {
