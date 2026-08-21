@@ -130,6 +130,35 @@ describe('createTaskTool 派发', () => {
     expect(captured).toEqual([definitions['memory-keeper']])
   })
 
+  test("thinking 档位透传：派发带 thinking:'off' → 子会话按关思考装配", async () => {
+    const modes: string[] = []
+    const { tool } = makeTaskTool({
+      buildChildRunOptions: (_definition, childAbort, thinking) => {
+        modes.push(thinking)
+        return { abortController: childAbort } as unknown as PiRunOptions
+      },
+      runSession: makeScriptedSession([assistantMessageEnd('ok')]).runSession,
+    })
+    await runTool(tool, 'tc-1', { subagent_type: 'memory-keeper', prompt: '归档', thinking: 'off' })
+    expect(modes).toEqual(['off'])
+  })
+
+  test('thinking 档位失败方向朝「维持现状」：省略或写错一律回落 provider 默认', async () => {
+    const modes: string[] = []
+    const { tool } = makeTaskTool({
+      buildChildRunOptions: (_definition, childAbort, thinking) => {
+        modes.push(thinking)
+        return { abortController: childAbort } as unknown as PiRunOptions
+      },
+      runSession: makeScriptedSession([assistantMessageEnd('ok')]).runSession,
+    })
+    await runTool(tool, 'tc-1', { subagent_type: 'memory-keeper', prompt: '归档' })
+    await runTool(tool, 'tc-2', { subagent_type: 'memory-keeper', prompt: '归档', thinking: 'on' })
+    await runTool(tool, 'tc-3', { subagent_type: 'memory-keeper', prompt: '归档', thinking: 'OFF' })
+    // 漏传/拼错最多是没省下 token，绝不能反过来把某个环节的思考悄悄关掉。
+    expect(modes).toEqual(['provider-default', 'provider-default', 'provider-default'])
+  })
+
   test('注册表解析失败 fail-loud：错误原样冒泡成工具 isError 结果，不吞成空名单', async () => {
     const { tool } = makeTaskTool({
       loadDefinitions: async () => {
