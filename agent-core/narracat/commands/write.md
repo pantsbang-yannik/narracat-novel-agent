@@ -200,7 +200,7 @@ run_id: 3
 正文路径: {manuscript_path}
 细纲路径: {outline_path}"
 
-Task B（memory-keeper）: "第 {chapter_num} 章收尾入库。
+Task B（memory-keeper）: "第 {chapter_num} 章收尾入库。本任务不做事实抽取——本章的事实由并行的三个暂存任务负责，不要调抽取脚手架、不要暂存事实。
 正文路径: {manuscript_path}
 细纲路径: {outline_path}
 {is_arc_end == true 时追加: 本章为 arc {arc_id}（第 {chapter_start}-{chapter_end} 章）末章，入库后需提交该 arc 的压缩摘要。}
