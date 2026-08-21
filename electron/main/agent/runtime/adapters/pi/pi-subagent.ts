@@ -19,6 +19,7 @@ import { NARRACAT_ENGINE_AGENT_IDS } from '../../../../engine/agent-core-contrac
 import type { EngineAgentDefinition } from '../../../../engine/engine-agent-registry.ts'
 import { PI_MAX_TURNS_MESSAGE_TYPE, PI_SUBAGENT_EVENT_MESSAGE_TYPE } from './pi-event-mapper.ts'
 import type { PiSubagentAbnormalStop, PiSubagentAbnormalStopDetails } from './pi-event-mapper.ts'
+import type { PiThinkingMode } from './pi-model.ts'
 import { runPiSession } from './pi-session.ts'
 import type { PiRunOptions } from './pi-session.ts'
 
@@ -80,7 +81,11 @@ export function createSubagentEventChannel(): PiSubagentEventChannel {
 
 export interface CreateTaskToolArgs {
   loadDefinitions: () => Promise<Record<string, EngineAgentDefinition>>
-  buildChildRunOptions: (definition: EngineAgentDefinition, childAbort: AbortController) => PiRunOptions
+  buildChildRunOptions: (
+    definition: EngineAgentDefinition,
+    childAbort: AbortController,
+    thinking: PiThinkingMode,
+  ) => PiRunOptions
   channel: PiSubagentEventChannel
   parentSignal: AbortSignal
   /** 出稿/回执质量门（Task 6 runSubagentGate）：返回追加进结果的反馈行；恒不阻断，异常吞掉。 */
@@ -139,6 +144,12 @@ function createConcurrencyGate(limit: number) {
 const taskToolSchema = Type.Object({
   subagent_type: Type.String({ description: '子 agent 名，如 chapter-writer（narracat: 前缀可带可不带）' }),
   prompt: Type.String({ description: '交给子 agent 的完整任务描述（子会话不共享主会话上下文，须自足）' }),
+  thinking: Type.Optional(
+    Type.String({
+      description:
+        "子会话思考档：'off' = 关闭思考，只给低自由度任务用（输入已给定完整素材、只做打磨或按清单定点修改）；省略或其它值 = 保持模型默认。拿不准就省略。",
+    }),
+  ),
 })
 
 export function createTaskTool({
@@ -168,6 +179,9 @@ export function createTaskTool({
     parameters: taskToolSchema,
     async execute(toolCallId, params, signal) {
       const agentId = String(params.subagent_type ?? '').replace(NAMESPACE_PREFIX, '')
+      // 只认 'off' 这一个值，其余（省略、拼错、模型自由发挥）一律回落 provider 默认——失败方向
+      // 朝着「维持现状」，漏传/传错最多是没省下 token，不会把某个环节的思考悄悄关掉。
+      const thinking: PiThinkingMode = params.thinking === 'off' ? 'off' : 'provider-default'
       try {
         const definitions = await load()
         const definition = definitions[agentId]
@@ -194,7 +208,7 @@ export function createTaskTool({
         try {
           for await (const message of runSession({
             prompt: String(params.prompt ?? ''),
-            options: buildChildRunOptions(definition, childAbort),
+            options: buildChildRunOptions(definition, childAbort, thinking),
           })) {
             channel.push({ type: PI_SUBAGENT_EVENT_MESSAGE_TYPE, parentToolCallId: toolCallId, agentId, message })
             if (!isRecord(message)) continue

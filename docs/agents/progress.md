@@ -4,13 +4,74 @@
 
 ## Current Branch
 
-`main`（= `4699fb2`，**已 push**）。社区第三批：PR #13（#5 刀 1，custom 渠道 OpenAI 协议）合并。此前社区第二批三个 PR（#18/#19/#20）合并，对应 issue #14/#16/#17 全部关闭、#15 拆分归位后 close。引擎 **4.0.172**（本次未动引擎）。仓库已合一，「公开镜像仓 + 定向同步」的说法自 2026-08-16 起作废——本仓即唯一开发仓。
+`main`（= `05bc56c`，**已 push**）。工具可靠性四刀已全部合入（#43 UI 措辞 / #44 引擎串档 / #45 find 去 fd / #46 输出上限 64000，引擎 **4.0.174**）。分支 `fix/agent-tool-and-writing-chain` 在此之上攒了五刀（引擎 **4.0.177**），**未 push**。前四刀已真机验收通过（0.1.64 包），第五刀（未建档角色不再整单驳回）待下次跑章验证。
 
 ## Current Phase
 
 主线 `main`。产品北极星 = ADR-0030「账房归我们 / 花归用户 / 尺归读者」；产品方向 2026-07-11 定案两大模块「用户编辑 + 可配置底座」。**正文编辑器主战役已收官**（PR #443 合并 main，ADR-0031，引擎 4.0.91，产品主人真机验收通过）；写作质量「脱胎换骨」主线阶段性收刀（arc 速度靶 PR #441 / 获得引擎四刀 PR #442 均已合并）。ADR 已扩至 **0035**。
 
 产品路线以下方 **Next（产品路线图 · 2026-07-12 统筹版）** 为准：四条泳道 = A 花的所有权（用户编辑）/ B 花的表达权（可配置底座）/ C 尺（评价与验证）/ D 账房（记忆与资产底座）。战略层以 `docs/COMPASS.md` 为准，执行入口 `/next-issue`。
+
+**2026-08-21（真机验收 + 第五刀：未建档角色从「整单驳回」改成「跳过并点名」，引擎 4.0.177）**：用 0.1.64 包跑完第 23 章。**前三刀确认真机生效**：grep 0 失败（基线 1 次 `rg is not available`）、find 0 失败（基线 1 次 `fd is not available`）、输出上限截断 0 次（基线 3 次），派发原文里冷改那一遍带着 `thinking='off'`，产品主人反馈「确实变快了」。
+
+**但我给的验收判据是错的，差点误判成串档。** 判据数的是 `novel_stage_extraction` 的**原始工具调用次数**（目标 3），实测 7 次（6 成功 + 1 失败）、`novel_commit_chapter` 2 次，看着像串档。查下来完全不是：`novel_commit_extraction_union` 返回 **`staged_runs: 3` / `facts_committed: 44` / `warnings: []`**，三轮暂存各自成功、并集正常落库；主会话派发原文也完全照 write.md（三个任务各带 run_id 1/2/3、收尾任务带「不做事实抽取」禁令），收尾 agent 自己也回报「未调用抽取脚手架与事实暂存工具」。**多出来的 4 次全是被整单驳回后的重发。** 这与上次「脚手架次数不可作判据」是同一类错误——**原始调用次数区分不了「串档」与「合法重试」，权威判据是 `staged_runs`**。
+
+**根因**：`writers.ts` 里 `relationship_updates` 只要有一端角色未建档，整个调用返回 errors、**19 条事实一条都不落**；`novel_commit_chapter` 的 `characters_appeared` 同款。第 23 章新登场巡检、张福、清河剑派、镇岳堂、茶棚客商五个未建档角色，于是三个暂存 agent + 一个收尾 agent 各吃一次驳回、各把整份清单重新生成并重发一遍。**那次 `run_id` 缺失的校验失败就是重发时模型漏了字段**（它下一次立刻补上，零数据损失）。而驳回的 hint 写的是「确认角色名与档案一致」，假设的是名字写错——对真·新登场角色完全没用；memory-keeper 也没有建档权限，**驳回换来的唯一结果就是多跑一轮**。
+
+**改法**：两处都改成「跳过该条 + 在返回里点名」，facts / 章摘要照常落库。理由是同一个函数里本来就有两套标准——`resolveExtractionFacts` 下方「非关系事实主体未建档」一直是只 warning、照常入库；`novelCommitChapter` 里 `checkChapterWordCount` 也是「finding-only，只标不阻断」。顺带把 `relationships_updated` 从「入参条数」改成「实际折算条数」（跳过了却报「已更新」是骗调用方），`characters_appeared` 计数同理只计真正入库的。
+
+**光改工具还不够**：工具不驳回了，agent 看到 warning 仍可能自己重发。故 `memory-keeper.md` 两处补明「被跳过是正常处置，**不要为此重发整份清单**」。
+
+**验证**：先按 TDD 把两条钉住驳回的旧用例改成钉住新行为（先红 2 条），实现后 mcp-server **926 pass / 0 fail across 38 files**（走 vitest 不是 bun）；App 侧 typecheck / **3131 pass 0 fail across 311 files** / check:architecture 全绿；`verify:narracat-agent-core` 版本一致 4.0.177；dist 已随 src 重建并提交。**本刀真机未验**——下次跑章看那 4 次重发是否消失。
+
+**顺带记两个盲区**（这次靠 pi 主会话 JSONL + 数据库 + 并集返回值三处拼才查出来）：durable 事件里子 agent 的工具调用 `parentToolCallId` / `agentId` 全是 None、`summary` 全空，**无法从事件流回答「这个调用是哪个子 agent 发的」**。另外 read 仍有 5 次失败（16.1%）：2 次 EISDIR（把目录当文件读）+ 3 次 ENOENT（猜文件名 `novel.md` / `ch-023.md` / 上一章的 `ch-022.md`），即 #37 ③ 那条线索。
+
+**2026-08-21（输出上限按模型兑现：`before_provider_request` 改写请求体，未提交）**：接上一条撞出的「实发 max_tokens 恒为 32000」。生产恒走 `streamSimple`，`sdk.js` 不接受外部 streamFn，唯一改得到真实请求体的官方口子是扩展事件 `before_provider_request`（`sdk.js:215` 的 `onPayload` → `anthropic.js:318` / `openai-completions.js:78` 用返回值整份替换 params）。新增 `pi-max-output-tokens.ts` 挂在这里。
+
+**这一刀的风险不在「抬不上去」而在「抬过头」**：发一个超过模型上限的 `max_tokens` 是**硬 400**，整条链当场断。所以做成白名单，**只对查得到第一手文档依据的模型抬**，其余一个字都不改、照旧 32000。查证结果：DeepSeek 官方文档（api-docs.deepseek.com/quick_start/pricing）——`deepseek-v4-pro` / `deepseek-v4-flash` 均为 context 1M / **max output 384K**；Anthropic 官方——Fable 5 / Opus 5 / Opus 4.8 / 4.7 / 4.6 / Sonnet 5 / Sonnet 4.6 输出上限均为 **128K**。**GLM 与 MiniMax 只搜到聚合站的二手数字，够不上门槛，整家不收**；更老的 Claude（Sonnet 4.5 / Haiku 4.5 / Opus 4.1…）各自不同且普遍更低，也不收。加新条目的门槛写进文件头：必须附第一手出处与核对日期。
+
+**失败方向一律朝「维持现状」**：白名单漏了某模型 → 它还是 32000，不会被打挂；请求体里没有该字段 → 原样放行（凭空加字段是在猜 provider 契约）；已经比目标大 → 只抬不降。键是 `provider/模型id` 限定的——custom 渠道挂个同名 `deepseek-v4-pro` 不蹭 deepseek 的依据，因为它的 baseUrl 指向哪儿我们不知道。`[1m]` 后缀归一到基础模型（同一个模型，输出上限相同）。两条 wire 的字段名不同（anthropic 恒 `max_tokens`，openai 视 compat 可能是 `max_completion_tokens`），两个都认。
+
+**抓包实测三组**（真跑 `runPiSession` + 本机假端点）：`deepseek-v4-pro` → **实发 64000**；同上 + 冷改档 → 64000 且 `thinking:{"type":"disabled"}`；未收录的 `deepseek-chat` → **32000（未被改动）**。父/子两条装配路径各自按自己的模型解析（子会话可能走轻量槽的另一个 id），有源码守卫用例数注入点个数。
+
+**打包后翻 durable 事件拿到了改动前的基线**（0.1.59 测试包，2026-08-21 03:50 那次写章），两条推翻了动手时的估计：
+
+- **`grep → ripgrep (rg) is not available and could not be downloaded`，target `.narracat/staging/ch-022.md`**——grep 确实在 `/write` 主链上炸了。动手时按 `write.md` 的 allowed-tools 判断「主链不用 grep」是错的：写手子会话自己的工具面里有 grep，它去搜任务书时撞上了。
+- **3 次「子 agent 单次回复达到输出上限被截断」**——32000 是真被撞穿的，不是「余量而已」。原先写的「输出上限这刀收益接近零」不成立，删掉。
+
+同批基线还有 `find → fd is not available`（#45 未进该测试包）、事实暂存 6 次 / 章节收尾 2 次（串档特征，#44 未进该包），四刀本就是冲这些去的。**验收就是拿新包再跑一章、把这几项逐条对掉。**
+
+**2026-08-21（#42 thinking 分档：冷改关、热写开 + 撞出「max_tokens 两刀都是空转」，引擎 4.0.176，未提交）**：DeepSeek V4 默认开着 thinking，而 thinking 计入 `output_tokens`，真机实测冷改与热写两个环节 thinking 都占输出的 **87%**。冷改是低自由度任务（输入是完整正文、只做打磨），A/B 两臂产出相似度 **98.7%**、54 处差异全是采样抖动——那 87% 白烧。热写反过来（盲读偏好开 thinking 那份，n=1），所以只能分档不能全局关。
+
+**机制比想象的简单，但字段名会骗人**：让 pi 发出 `thinking:{type:"disabled"}` 要两个条件同时成立——`model.reasoning` 为真 + `options.thinkingEnabled === false`。后者 `pi-session.ts` 恒传 `thinkingLevel:'off'` 早就给到了，**所以只差把 `reasoning` 置 true**。注意 `reasoning:false` 的语义不是「关思考」而是「一个字都不发、听 provider 的」，`true` 才是「显式关掉」——两者差在「不发」与「发 disabled」，代码里钉了长注释。落地为 `PiThinkingMode`（`provider-default` / `off`）+ Task 派发新增可选 `thinking` 字段，`buildChildRunOptions` 逐次接收；**只认 `'off'` 一个值**，省略/拼错/模型自由发挥一律回落 provider 默认——失败方向朝着「维持现状」，漏传最多是没省下 token，绝不会把某个环节的思考悄悄关掉。引擎侧 `write.md` 3d 冷改派发改为 `Task(chapter-writer, thinking="off")`，并写明热写那一遍不要加。
+
+**取证走本机假 Anthropic 端点抓真实请求体**（与 #35 同一手法，真跑 `runPiSession` 而不是复刻算式）：`provider-default` → 请求体**无** thinking 字段；`off` → `{"type":"disabled"}`。
+
+**顺带撞出一个更大的问题：#35 的 ×3 补偿与 #46 的 32000→64000，两刀都是空转。** 同一次抓包发现实发 `max_tokens` 恒为 **32000**，与我们配的值无关。根因在 `pi-ai@0.73.1` 的 `simple-options.js:1`：
+
+    maxTokens: options?.maxTokens ?? (model.maxTokens > 0 ? Math.min(model.maxTokens, 32000) : undefined)
+
+而 `pi-agent-core/dist/agent.js:114` 是 `streamFn = options.streamFn ?? streamSimple`、`pi-coding-agent/dist/core/sdk.js:190` 构造 Agent 时**不接受外部 streamFn**——生产恒走 `streamSimple` → `streamSimpleAnthropic` → 上面这行把 `options.maxTokens` 填成正数，于是 `anthropic.js:663` 那条 `|| (model.maxTokens / 3) | 0` **永远到不了**。#35 当时断言的「除 3」在生产路径上不可达。实测四组：`20000 → 20000`（除 3 的话应是 6666）、`60000 → 32000`、`192000 → 32000`、`300000 → 32000`，判据干净。
+
+**本批只做「把代码改成说实话」**：删掉空转的 ×3 补偿（`model.maxTokens` 192000 → 64000，实发不变仍是 32000，抓包复验过零行为变化），新增 `PI_UPSTREAM_MAX_OUTPUT_CAP` 并把 `effectivePiMaxTokens` 改成复刻真实算式；测试断言从「实发 == TARGET」改成「**实发 == 32000 且 < TARGET**」——前后两刀都因为断言落在配置值上而误判成已生效，这条把事实钉死。
+
+**真要突破 32000 的唯一口子是 `before_provider_request`**（`sdk.js:215` 的 `onPayload` → `anthropic.js:318` 用返回值整份替换 params），可直接改写请求体。**但不能盲抬**：Anthropic 官方各模型输出上限不同（部分只有 32000），一律发 64000 会让这些模型直接 400，要做得按模型分档，属独立一刀。**眼下不急**——thinking 分档把冷改输出从 21561 压到 2775、热写也只有 16520，32000 够用；截断的真凶本来就是 thinking 占了 87% 的预算，不是这个数太小。
+
+**未做**：3c 机械门的补写派发同属低自由度（按 errors 逐条补写、保留其余正文），大概率也不需要 thinking，但**没有 A/B 证据，故不动**。热写那一票仍是 n=1，issue #42 原本就建议先补样本——本次只落了证据硬的那半边（冷改），热写维持现状。
+
+**2026-08-21（grep 去 ripgrep 依赖 + `/write` 确认门缺省语义，引擎 4.0.175，未提交）**：接 #45（find 去 fd）那刀的同源缺口。pi 的 grep 走 ripgrep，坏法与 find 完全一样——查系统 PATH → 查不到就去 GitHub 下载，而 Finder 启动的 App 继承 launchd 窄 PATH（`/usr/bin:/bin:/usr/sbin:/sbin`）、作者机器不装这类开发者工具、GitHub 下载对国内用户不可达。影响面是 `/world`、`/rewrite`、`/sync-chapter-memory`、`/revise-premise` 四条命令（`/write` 与 `/plan` 主链不用 grep）。
+
+**修法与 find 那刀不同，因为 grep 换不掉搜索实现**：`GrepOperations` 只暴露 isDirectory/readFile，`ensureTool("rg")` 是无条件的。故只继承 pi 的**工具定义**（name/label/description/schema/渲染函数原样复用，模型看到的那一面零漂移，有断言逐字比对 `createGrepToolDefinition`），单独重写 execute 用纯 JS 扫描。两条装配路径都注入（父会话 + `buildChildRunOptions`），并留了一条源码守卫用例数注入点个数——上一刀差点漏掉子会话那条。
+
+**拿真 ripgrep 逐项对拍过**（真实 dogfood 项目 novel-367c9d08，9 组查询，按行集合比对以分离顺序与格式）：**8 组行集合逐字一致**。两处有意分歧：①遍历顺序——rg 并行遍历顺序不定，本实现按字典序，撞匹配上限时截到的是同一批（顺序会进模型上下文，稳定比「跟 rg 一样」更重要）；②**带路径的 glob 是 pi 的真 bug**——rg 的 `--glob` 按**进程 cwd** 匹配而 pi 的 spawn 从不传 cwd，本机实测 cwd=仓库时 `glob:'manuscript/**/*.md'` 零命中、cwd=小说目录时 4 命中，打包版主进程 cwd 不是小说目录 ⇒ 生产上这类 glob 恒零命中。本实现按搜索根解析，这条是修 bug 不是漂移。
+
+**验证特意在 Node 下跑，不只在 bun**（`node --experimental-strip-types` 对真实项目冒烟，全项目扫 39ms）——单测跑 bun、生产跑 Node，只有 bun 绿证明不了生产绿，这是 find 那刀留下的教训。另有两条守卫：pi 未导出的 `GREP_MAX_LINE_LENGTH`（500）只在截断提示文案里用到，故拿 pi 自己的 `truncateLine` 反测这个边界，它一改就红；二进制文件按 NUL 跳过、单文件 >2MB 不搜（rg 是流式的，我们要整份读进主进程内存，撞上打包 embedding 模型就是实打实的卡顿）。
+
+**#34（`/write` 确认门）一并修掉**：`write.md` 步骤 2 原本判 `== "collaborative"` 才确认、`== "auto"` 才跳过，两个分支都不命中时（config.yaml 缺 `automation_level` 的历史项目）确认门静默消失，与 `plan.md` 的 `== "auto"` 才跳过正好相反。App 侧读出路径已统一按「缺省 = collaborative」处理，所以工作台显示「协作模式」而 `/write` 实际不确认——**显示与行为对不上**。改成与 plan.md 同向。全仓复查了 `automation_level` 的其它判定点（`plan.md:18`、`new-character-intake.md:45`）方向都对，只有这一处反。
+
+**顺带发现未处理**：`write.md` 的断点恢复段（第 35 行）那个 AskUserQuestion 是无条件的，auto 模式下也会问——与 plan.md「auto 时跳过本命令所有 AskUserQuestion」不一致。只在有 checkpoint 中断时触发，属异常路径，问一下也合理，故未动，待产品主人定。
+
+**验证**：typecheck / 全量 **3112 pass 0 fail across 310 files**（对 main 基线 +21 tests）/ check:design / check:architecture / build 全绿；`verify:narracat-agent-core` 版本一致 4.0.175。**真机验收未做**——与已合入的四刀合并成一次打包 + 一次跑章验收。
 
 **2026-08-20（#37 刀①：durable 事件路径取证 + 换 pi 遗留契约清理，PR #41）**：Agent 过程流频繁「已跳过 调用 read」，取证发现 read 失败率 **25.6%（50/195）**，但错误里的路径被我们自己的脱敏（`agent-durable-events.ts` 的 `ABSOLUTE_PATH`）整段抹成 `[本机路径]`——**根因不可查这件事本身是第一层问题**。改法：脱敏**之前**先把已知根相对化成 `<项目>/…` / `<引擎>/…`，根以上不落盘、根以外照旧整段抹。
 

@@ -140,9 +140,9 @@ describe('切片③ 权限门禁接线', () => {
     const adapter = createPiAdapter()
     const options = (await adapter.createRunOptions(makeRunConfig())) as PiRunOptions
     expect(options.tools).toEqual(['read', 'grep', 'find', 'bash'])
-    // 只有 find（不依赖 fd 的替代实现，工具面含 find 时自动注入）——此处要钉的是
+    // 只有 find/grep（不依赖 fd/ripgrep 的替代实现，工具面含它们时自动注入）——此处要钉的是
     // 「不注册其它自定义工具」，故精确列举而非只判空。
-    expect(options.customTools.map((tool) => tool.name)).toEqual(['find'])
+    expect(options.customTools.map((tool) => tool.name)).toEqual(['find', 'grep'])
   })
 
   test('allowedTools 含 AskUserQuestion 时注册自定义工具且 tools 列表含其名', async () => {
@@ -164,7 +164,8 @@ describe('切片③ 权限门禁接线', () => {
   test('guard 扩展始终注入且允许根含 novelRootDir/projectPath/cwd', async () => {
     const adapter = createPiAdapter()
     const options = (await adapter.createRunOptions(makeRunConfig())) as PiRunOptions
-    expect(options.extensions).toHaveLength(2)
+    // guard + eager 参数救回 + 输出上限兑现（测试配置的主力槽是白名单内的 deepseek-v4-pro）。
+    expect(options.extensions).toHaveLength(3)
     expect(options.extensions.some((extension) => extension.handlers.has('tool_call'))).toBe(true)
   })
 
@@ -212,7 +213,7 @@ describe('切片③ 权限门禁接线', () => {
     // 只有 find（不依赖 fd 的替代实现，工具面含 find 时自动注入）——此处要钉的是
     // 「不注册其它自定义工具」，故精确列举而非只判空。
     expect(options.customTools.map((tool) => tool.name)).toEqual(['find'])
-    expect(options.extensions).toHaveLength(2)
+    expect(options.extensions).toHaveLength(3)
   })
 
   test('createSandboxedRunOptions 沙盒路径同规持久化：resume 翻成 sessionStore.resumeSessionId（对齐 SDK persistSession 默认，向导轮次续接同构）', async () => {
@@ -232,7 +233,7 @@ describe('切片④ 引擎钩子接线', () => {
   test('loadNarraCatRuntime=true → extensions 含 guard + engine-hooks 两个扩展', async () => {
     const adapter = createPiAdapter()
     const options = (await adapter.createRunOptions(makeRunConfig({ loadNarraCatRuntime: true }))) as PiRunOptions
-    expect(options.extensions).toHaveLength(3)
+    expect(options.extensions).toHaveLength(4)
     expect(options.extensions.some((extension) => extension.handlers.has('tool_call'))).toBe(true)
     expect(options.extensions.some((extension) => extension.handlers.has('tool_result'))).toBe(true)
   })
@@ -241,10 +242,29 @@ describe('切片④ 引擎钩子接线', () => {
     const adapter = createPiAdapter()
     const withoutFlag = (await adapter.createRunOptions(makeRunConfig())) as PiRunOptions
     expect(withoutFlag.extensions.some((extension) => extension.handlers.has('tool_result'))).toBe(false)
-    expect(withoutFlag.extensions).toHaveLength(2)
+    expect(withoutFlag.extensions).toHaveLength(3)
     const withFalse = (await adapter.createRunOptions(makeRunConfig({ loadNarraCatRuntime: false }))) as PiRunOptions
     expect(withFalse.extensions.some((extension) => extension.handlers.has('tool_result'))).toBe(false)
-    expect(withFalse.extensions).toHaveLength(2)
+    expect(withFalse.extensions).toHaveLength(3)
+  })
+
+  test('输出上限兑现扩展按模型装配：白名单内挂，白名单外零装配（不赌 provider 的上限）', async () => {
+    const adapter = createPiAdapter()
+    const hasPatch = (options: PiRunOptions) =>
+      options.extensions.some((extension) => extension.handlers.has('before_provider_request'))
+    const whitelisted = (await adapter.createRunOptions(makeRunConfig())) as PiRunOptions
+    expect(hasPatch(whitelisted)).toBe(true)
+    const unknownModel = (await adapter.createRunOptions(
+      makeRunConfig({
+        // 换成没收进白名单的模型 id（老 deepseek-chat 输出上限低得多，抬上去就是硬 400）。
+        config: {
+          ...config,
+          modelPool: [{ provider: 'deepseek', modelId: 'deepseek-chat', verification: null }],
+          primaryModelKey: 'deepseek/deepseek-chat',
+        },
+      } as never),
+    )) as PiRunOptions
+    expect(hasPatch(unknownModel)).toBe(false)
   })
 })
 

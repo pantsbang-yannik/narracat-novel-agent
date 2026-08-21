@@ -47,7 +47,7 @@ allowed-tools: [Agent, TaskCreate, TaskUpdate, Read, Write, Glob, AskUserQuestio
 
 ## 步骤 2：确认（仅协作模式）
 
-automation_level == "collaborative" 时：向用户摘要本章细纲要点与上下文准备时的提醒，AskUserQuestion「开始写作」/「取消」；取消 → 终止。automation_level == "auto" 时跳过。完成后 novel_checkpoint(step=2)。
+automation_level == "auto" 时跳过本步骤；**其余情况一律走确认门**（含 `.narracat/config.yaml` 里没有这个字段——缺省即协作，与 plan.md 同向）：向用户摘要本章细纲要点与上下文准备时的提醒，AskUserQuestion「开始写作」/「取消」；取消 → 终止。完成后 novel_checkpoint(step=2)。
 
 ## 步骤 3：正文生成
 
@@ -128,10 +128,10 @@ Task(chapter-writer): "第 {chapter_num} 章正文有下列交付问题，逐条
 
 ### 3d 冷 pass（唯一改稿位）
 
-派发：
+派发（**必须带 `thinking="off"`**：冷改是低自由度任务——输入是完整正文、只做打磨，模型的"思考"在这里不产生价值。真机 A/B 实测两臂产出相似度 98.7%、54 处差异全是采样抖动，而思考白烧掉单次约 87% 的输出预算。热写那一遍相反，不要加这个参数）：
 
 ```
-Task(chapter-writer): "对第 {chapter_num} 章成稿做一遍冷改打磨，按下面四遍依次处理，改完把整章覆写回正文路径。
+Task(chapter-writer, thinking="off"): "对第 {chapter_num} 章成稿做一遍冷改打磨，按下面四遍依次处理，改完把整章覆写回正文路径。
 正文路径: {manuscript_path}
 任务书路径: {brief 路径}（第四段是本书语感基准）
 第一遍·擦机器腔：下面的机械扫描结果是排序线索，不是要归零的指标——按命中密度从高到低处置，读上下文，是机器腔就换成这本书的说法，是正常人话就保留：

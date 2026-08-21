@@ -31,7 +31,7 @@ tools:
 - `anchor.core_experience`：本章给读者的核心体验，一句话。
 - `anchor.heartbeat_moment`：本章最有戏的那个瞬间，一句话。
 - `key_events`：关键事件，最多 5 条。
-- `characters_appeared`：本章出场角色名列表。
+- `characters_appeared`：本章出场角色名列表。尚未建档的名字会被跳过并在返回里点名，收尾照常完成——**同样不要为此重发整份收尾清单**。
 - `emotional_tone`：本章情绪基调，一个短语。
 - `continuation_hook`：1-3 条「可继续写的戏」——本章悬而未决的压力、未兑现的威胁或承诺、未回答的问题，写明戏悬在哪。
 - `foreshadowing_actions`（可选）：本章实际触达的伏笔，每条 `{id, action}`，action ∈ plant / develop / reveal。
@@ -63,6 +63,7 @@ tools:
   - predicate 从受控词表选：identity / location / possession / goal / injury / ability / status / secret / reputation / oath / debt / relationship；确实不在表内的，加 `x-` 前缀自拟，自拟名用中文短词（如 `x-恐惧`、`x-家规`），不用英文——`x-` 后面的名字会原样展示给作者。
   - change_type：new（新事实）/ update（替换同主谓的旧值，传 upsert_key）/ invalidate（旧事实被本章推翻）。
 - `relationship_updates` 每条 `{a, b, state}`：两个角色名 + 关系当前状态一句话。关系断绝、反目、疏远或一方死亡，同样以新 state 写明当下状态（如「已割袍断义，再无往来」），不要用 invalidate 抹掉旧关系——关系终结本身是要记住的事实。
+  - 两端里有**尚未建档**的角色时，这一条会被跳过并在返回的 warnings 里点名，其余事实照常入库。**这是正常处置，不要为此把整份清单重发一遍**；真需要这条关系就先给角色建档，下次再提。
 
 只提取正文明确写出的事实，不推断、不补全。尤其是人物的亲属/师承/主仆关系与身份归属：本章正文没有明写，就不写进 object——不从姓氏、称谓、官职或情境脑补（「同姓＋获罪」推不出「某某之父」）。事实句内也不夹带正文没有的衍生动作（正文只写「问了下落」，不写成「派人去抓」）。来源章号必须准确。把你这一轮读出的事实全部交上去——宁多勿漏：宁多勿漏指正文明写的事实一条别落，不是允许补写推断。
 
